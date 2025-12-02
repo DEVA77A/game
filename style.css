@@ -239,6 +239,46 @@ canvas {
     z-index: 20;
 }
 
+#post-match-menu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.9);
+    padding: 40px;
+    border: 2px solid #00f3ff;
+    box-shadow: 0 0 20px #00f3ff;
+    z-index: 200;
+}
+
+#post-match-menu h2 {
+    color: #fff;
+    font-size: 32px;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px #fff;
+}
+
+#post-match-menu button {
+    display: block;
+    width: 200px;
+    margin: 10px auto;
+    padding: 15px;
+    font-size: 18px;
+    background: transparent;
+    color: #00f3ff;
+    border: 2px solid #00f3ff;
+    cursor: pointer;
+    font-family: 'Courier New', Courier, monospace;
+    transition: all 0.2s;
+}
+
+#post-match-menu button:hover {
+    background: #00f3ff;
+    color: #000;
+    box-shadow: 0 0 15px #00f3ff;
+}
+
 .hidden {
     display: none !important;
 }

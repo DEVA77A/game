@@ -1,232 +1,305 @@
 import { Entity } from './Entity.js';
 
 export class Player extends Entity {
-    constructor(x, y, color, isAI = false, input = null, aiSystem = null, onProjectile = null) {
+    constructor(x, y, color, isAI, input, aiController, spawnProjectile) {
         super(x, y, color);
         this.isAI = isAI;
         this.input = input;
-        this.aiSystem = aiSystem;
-        this.onProjectile = onProjectile; // Callback to spawn projectile
-        this.dashSpeed = 1200; 
+        this.aiController = aiController;
+        this.spawnProjectile = spawnProjectile;
+        
+        // Override Entity defaults if needed
+        this.width = 40;
+        this.height = 80;
+        this.speed = 400; // Faster movement
+        this.jumpForce = -850; // Match Entity.js jumpStrength
+        
+        // State Machine
+        // Entity.js uses: stance_idle, move, jump, fall, etc.
+        // We will use compatible states.
+        
+        // Combat
         this.comboCount = 0;
         this.lastAttackTime = 0;
-        this.blockStartTime = 0; // For perfect block timing
+        this.blockStartTime = 0;
+        
+        // Special Move
+        this.specialCooldown = 0;
+        this.maxSpecialCooldown = 5.0;
+
+        // Dash
+        this.dashCooldown = 0;
     }
 
-    update(dt, opponent, canControl = true) {
-        // 1. Capture previous state for transition checks
-        const prevState = this.state;
+    update(dt, opponent, isSimulation = true) {
+        if (this.isDead) return;
 
-        // 2. Always face opponent (unless incapacitated)
-        if (opponent && !this.isDead && this.state !== 'knockdown' && this.state !== 'getting_up' && this.state !== 'dash' && this.state !== 'dash_clash_stun' && !this.state.includes('special')) {
-            this.facing = opponent.x > this.x ? 1 : -1;
+        // Cooldowns
+        if (this.specialCooldown > 0) this.specialCooldown -= dt;
+        if (this.dashCooldown > 0) this.dashCooldown -= dt;
+
+        // FIX: Dash hang safeguard - force reset if stuck in dash
+        if (this.state === 'dash' && this.stateTimer <= 0) {
+            this.endState();
+        }
+        
+        // FIX: Special move hang safeguard
+        if (this.state === 'attack_special_active' && this.stateTimer <= 0) {
+            this.endState();
         }
 
-        // 3. Run Physics & State Timers (Entity.update)
-        super.update(dt);
-        
-        // 4. Special Attack State Machine
-        // Handle transitions that Entity.js ignores
-        if (this.state === 'attack_special_windup' && this.stateTimer <= 0) {
-            this.state = 'attack_special_active';
-            this.stateTimer = 0.2; // Active frame for spawning
-            
-            // Spawn Projectile
-            if (this.onProjectile) {
-                this.onProjectile(this.x + (this.facing * 60), this.y - 45, this.facing, this);
+        // Input / AI Handling (only if actionable AND simulation is running)
+        // This prevents AI from fighting during countdown (pre_fight)
+        if (this.isActionable() && isSimulation) {
+            if (this.isAI) {
+                this.handleAI(dt, opponent);
+            } else {
+                this.handleInput();
             }
-        } else if (this.state === 'attack_special_active' && this.stateTimer <= 0) {
-            this.state = 'attack_special_recover';
-            this.stateTimer = 0.5; // Recovery time
-        } else if (this.state === 'attack_special_recover' && this.stateTimer <= 0) {
-            this.state = 'stance_idle';
         }
 
-        if (this.isDead || !canControl) return;
+        // Physics & State (Handled by Entity.js)
+        if (isSimulation) {
+            super.update(dt);
+            this.clampPosition();
+        }
 
-        // 5. Input Handling
-        // Cannot move/act during attacks, hitstun, knockdown, etc.
-        const canAct = this.state === 'stance_idle' || this.state === 'move' || this.state === 'jump';
-        
-        // Blocking allows releasing the block
-        if (!canAct && this.state !== 'blocking') return; 
+        // Animation / Facing
+        // Always face opponent if idle/moving
+        if (this.state === 'stance_idle' || this.state === 'move') {
+            if (opponent && opponent.x > this.x) this.facing = 1;
+            else if (opponent) this.facing = -1;
+        }
+    }
 
-        let dx = 0;
-        let jump = false;
-        let dash = false;
-        let punch = false;
-        let kick = false;
-        let special = false;
-        let block = false;
+    clampPosition() {
+        // Keep player within screen bounds (0 to 1024)
+        if (this.x < 20) {
+            this.x = 20;
+            if (this.vx < 0) this.vx = 0;
+            if (this.state === 'dash') this.endState();
+        }
+        if (this.x > 1004) {
+            this.x = 1004;
+            if (this.vx > 0) this.vx = 0;
+            if (this.state === 'dash') this.endState();
+        }
+    }
 
-        if (!this.isAI) {
-            // Human Input
-            if (this.input.isDown('KeyA')) dx = -1;
-            if (this.input.isDown('KeyD')) dx = 1;
-            
-            if (this.input.isJustPressed('Space') && this.isOnGround) {
-                jump = true;
-            }
-            
-            dash = this.input.isJustPressed('ShiftLeft') || this.input.isJustPressed('ShiftRight');
-            
-            punch = this.input.isJustPressed('KeyJ');
-            kick = this.input.isJustPressed('KeyK');
-            special = this.input.isJustPressed('KeyL');
-            block = this.input.isDown('KeyI');
+    isActionable() {
+        // Compatible with Entity.js states
+        // Allow input during combo windows (when stateTimer is low)
+        if (this.state.startsWith('attack_') && this.stateTimer < 0.1) return true;
+        return ['stance_idle', 'move', 'jump', 'idle', 'run'].includes(this.state);
+    }
+
+    handleAI(dt, opponent) {
+        if (!this.aiController) return;
+
+        // Use decideMove as defined in AdaptiveAI.js
+        const action = this.aiController.decideMove(this, opponent, dt);
+
+        // Apply Movement
+        if (action.dx !== 0) {
+            this.vx = action.dx * this.speed;
+            this.facing = action.dx;
+            this.state = 'move';
         } else {
-            // AI Input
-            const action = this.aiSystem.decideMove(this, opponent, dt);
-            dx = action.dx;
-            
-            if (action.dy < -0.5 && this.isOnGround) {
-                jump = true;
-            }
-
-            dash = action.dash;
-            punch = action.punch;
-            kick = action.kick;
-            special = action.special;
-            block = action.block;
+            this.vx = 0;
+            if (this.state === 'move') this.state = 'stance_idle';
         }
 
-        // 6. Execute Actions
-        
-        // Blocking Logic
-        if (block && this.isOnGround) {
+        // Actions
+        if (action.dash && this.dashCooldown <= 0 && this.isOnGround) {
+            this.performDash();
+        } else if (action.punch) {
+            this.performAttack('light');
+        } else if (action.kick) {
+            this.performAttack('heavy');
+        } else if (action.special) {
+            this.performSpecial();
+        } else if (action.block) {
             if (this.state !== 'blocking') {
                 this.state = 'blocking';
-                this.blockStartTime = Date.now(); // Start timing for perfect block
+                this.vx = 0;
+                this.blockStartTime = Date.now();
             }
-        } else if (this.state === 'blocking' && !block) {
-            this.state = 'stance_idle'; 
+        }
+        
+        // Jump (AI returns dy < 0 for jump)
+        if (action.dy < 0 && this.isOnGround) {
+            this.vy = this.jumpForce;
+            this.isOnGround = false;
+            this.state = 'jump';
+        }
+    }
+
+    handleInput() {
+        if (!this.input) return;
+
+        // Movement
+        let moving = false;
+        if (this.input.isDown('KeyA')) {
+            this.vx = -this.speed;
+            this.facing = -1;
+            moving = true;
+        } else if (this.input.isDown('KeyD')) {
+            this.vx = this.speed;
+            this.facing = 1;
+            moving = true;
+        }
+
+        if (moving && !this.state.startsWith('attack_')) {
+            this.state = 'move';
+        } else if (!moving && !this.state.startsWith('attack_')) {
+            this.vx = 0;
+            if (this.state === 'move') this.state = 'stance_idle';
         }
 
         // Jump
-        if (jump && this.state !== 'blocking') {
-            this.vy = -this.jumpStrength;
+        if (this.input.isJustPressed('Space') && this.isOnGround) {
+            this.vy = this.jumpForce;
             this.isOnGround = false;
+            this.state = 'jump';
         }
 
         // Dash
-        if (dash && this.dashCooldown <= 0 && this.state !== 'blocking') {
-            this.performDash(dx);
-        } 
-        // Special Skill Trigger Fix
-        // Ensure clean state check and cooldown
-        else if (special && this.specialCooldown <= 0 && this.isOnGround && this.state !== 'blocking' && !this.state.startsWith('attack_')) {
-             this.performSpecial();
-        } 
-        // Kick Combo
-        else if (kick && this.state !== 'blocking') {
-            if (this.state === 'stance_idle' || this.state === 'move') {
-                this.performAttack('kick', 1);
-            } else if (this.state === 'attack_kick_1' && this.comboTimer > 0 && this.stateTimer < 0.15) {
-                this.performAttack('kick', 2);
-            } else if (this.state === 'attack_kick_2' && this.comboTimer > 0 && this.stateTimer < 0.15) {
-                this.performAttack('kick', 3);
-            }
-        } 
-        // Punch Combo
-        else if (punch && this.state !== 'blocking') {
-            if (this.state === 'stance_idle' || this.state === 'move') {
-                this.performAttack('punch', 1);
-            } else if (this.state === 'attack_punch_1' && this.comboTimer > 0 && this.stateTimer < 0.1) {
-                this.performAttack('punch', 2);
-            } else if (this.state === 'attack_punch_2' && this.comboTimer > 0 && this.stateTimer < 0.1) {
-                this.performAttack('punch', 3);
-            }
-        } 
-        // Move
-        else if (this.state !== 'dash' && !this.state.startsWith('attack_') && this.state !== 'blockstun') {
-            let moveSpeed = this.speed;
-            
-            if (this.state === 'blocking') {
-                moveSpeed *= 0.5; // Slower movement while blocking
-            }
+        if (this.input.isJustPressed('ShiftLeft') && this.dashCooldown <= 0 && this.isOnGround) {
+            this.performDash();
+            return;
+        }
 
-            if (dx !== 0) {
-                // Acceleration
-                this.vx += dx * this.acceleration * dt;
-                if (Math.abs(this.vx) > moveSpeed) {
-                    this.vx = Math.sign(this.vx) * moveSpeed;
-                }
+        // Attacks
+        if (this.input.isJustPressed('KeyJ')) {
+            this.performAttack('light');
+        } else if (this.input.isJustPressed('KeyK')) {
+            this.performAttack('heavy');
+        } else if (this.input.isJustPressed('KeyL')) {
+            this.performSpecial();
+        }
+
+        // Block
+        if (this.input.isDown('KeyS') && this.isOnGround) {
+            if (this.state !== 'blocking') {
+                this.state = 'blocking';
+                this.vx = 0;
+                this.blockStartTime = Date.now();
             }
+        } else if (this.state === 'blocking' && !this.input.isDown('KeyS')) {
+            this.state = 'stance_idle';
         }
     }
 
-    performDash(dx) {
+    performDash() {
         this.state = 'dash';
-        this.stateTimer = 0.2;
-        this.dashCooldown = 2.0;
-        this.invulnerable = 0.2;
-        if (dx === 0) dx = this.facing;
-        this.vx = dx * this.dashSpeed;
-        this.vy = 0; 
+        this.stateTimer = 0.2; // Fixed duration 200ms
+        this.vx = this.facing * 800; // High speed
+        this.vy = 0;
+        this.dashCooldown = 1.0;
     }
 
-    performAttack(type, step) {
-        this.state = `attack_${type}_${step}`;
-        this.comboStep = step;
-        this.comboTimer = 0.6; // Window to continue combo
+    performAttack(type) {
+        // Allow sliding attacks (don't zero velocity completely, just friction)
+        // this.vx = 0; 
         
-        // Hitbox generation
-        let reach = 50;
-        let width = 30;
-        let damage = 5;
-        let knockback = 200;
-        let hitType = 'normal';
-        let duration = 0.2;
+        if (type === 'light') {
+            // Combo Logic
+            // Check if we can continue combo
+            // We can continue if we are in the previous attack state OR if we just finished it (comboTimer > 0)
+            // But to keep it simple and responsive:
+            // If state is idle/move -> Step 1
+            // If state is attack_punch_1 -> Step 2
+            // If state is attack_punch_2 -> Step 3
+            
+            let step = 1;
+            if (this.state === 'attack_punch_1') step = 2;
+            else if (this.state === 'attack_punch_2') step = 3;
+            
+            // Reset if too slow (handled by Entity.js comboTimer, but we enforce state check)
+            if (this.comboTimer <= 0) step = 1;
 
-        if (type === 'punch') {
-            // Punch combo: left -> right -> uppercut
-            if (step === 1) {
-                reach = 50; damage = 4; knockback = 100; duration = 0.2;
-            } else if (step === 2) {
-                reach = 50; damage = 6; knockback = 150; duration = 0.2;
-            } else if (step === 3) {
-                reach = 40; damage = 12; knockback = 400; duration = 0.4; hitType = 'knockdown_hit';
-                this.vx = this.facing * 100; // Step forward
-            }
+            this.state = `attack_punch_${step}`;
+            this.stateTimer = 0.25; // Slightly longer for visual clarity
+            this.comboStep = step;
+            this.comboTimer = 0.6; // Window to hit next button
+            
+            let damage = 5;
+            let kb = 100;
+            let kbY = 0;
+            
+            if (step === 2) { damage = 8; kb = 150; }
+            if (step === 3) { damage = 15; kb = 50; kbY = -400; } // Uppercut launches
+            
+            this.hitbox = { 
+                x: this.x + (this.facing * 30), 
+                y: this.y - 40, 
+                w: 40, 
+                h: 40, 
+                damage: damage, 
+                knockback: kb, 
+                knockbackY: kbY,
+                type: step === 3 ? 'knockdown_hit' : 'light' 
+            };
         } else {
-            // Kick combo: right -> left -> upperkick
-            if (step === 1) {
-                reach = 70; damage = 6; knockback = 150; duration = 0.3;
-            } else if (step === 2) {
-                reach = 70; damage = 8; knockback = 200; duration = 0.3;
-            } else if (step === 3) {
-                reach = 60; damage = 15; knockback = 450; duration = 0.5; hitType = 'knockdown_hit';
-                this.vx = this.facing * 150; // Step forward
-            }
-        }
+            // Kick Combo Logic
+            let step = 1;
+            if (this.state === 'attack_kick_1') step = 2;
+            else if (this.state === 'attack_kick_2') step = 3;
 
-        this.stateTimer = duration;
-        
-        this.hitbox = {
-            x: this.x + (this.facing * 30),
-            y: this.y - 50, // Chest/Head height
-            w: reach,
-            h: width,
-            damage: damage,
-            knockback: knockback,
-            type: hitType
-        };
+            if (this.comboTimer <= 0) step = 1;
 
-        // Adjust hitbox for Upperkick
-        if (type === 'kick' && step === 3) {
-            this.hitbox.y = this.y - 80; // Higher hit
-            this.hitbox.h = 60; // Taller hitbox
+            this.state = `attack_kick_${step}`;
+            this.stateTimer = 0.35;
+            this.comboStep = step;
+            this.comboTimer = 0.7;
+            
+            let damage = 10;
+            let kb = 200;
+            let kbY = 0;
+
+            if (step === 2) { damage = 12; kb = 250; }
+            if (step === 3) { damage = 20; kb = 100; kbY = -500; } // Upperkick launches high
+
+            this.hitbox = { 
+                x: this.x + (this.facing * 40), 
+                y: this.y - 50, 
+                w: 50, 
+                h: 50, 
+                damage: damage, 
+                knockback: kb, 
+                knockbackY: kbY,
+                type: step === 3 ? 'knockdown_hit' : 'heavy' 
+            };
         }
-        
-        // Slight lunge for all attacks
-        if (step < 3) this.vx = this.facing * 50;
     }
 
     performSpecial() {
-        // Special: Windup -> Active -> Recover
-        this.state = 'attack_special_windup';
-        this.stateTimer = 0.6; // Windup time
-        this.specialCooldown = this.maxSpecialCooldown;
+        if (this.specialCooldown > 0) return;
+        
+        // FIX: Use correct state name for Renderer
+        this.state = 'attack_special_active';
+        this.stateTimer = 0.5;
         this.vx = 0;
+        this.specialCooldown = this.maxSpecialCooldown;
+        
+        // Spawn Projectile
+        if (this.spawnProjectile) {
+            this.spawnProjectile(this.x + (this.facing * 40), this.y - 40, this.facing, this);
+        }
     }
+
+    endState() {
+        this.state = 'stance_idle';
+        this.hitbox = null;
+        this.stateTimer = 0;
+        
+        // Reset velocity if coming out of dash
+        if (Math.abs(this.vx) > this.speed) {
+            this.vx = 0;
+        }
+    }
+
+    // Override Entity.takeDamage to handle death state properly if needed
+    // But Entity.js takeDamage is pretty good. We just need to ensure 'die' is handled.
+    // Entity.js sets isDead = true.
 }

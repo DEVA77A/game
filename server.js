@@ -7,10 +7,18 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 // Serve static files
 app.use(express.static(path.join(__dirname, '.')));
+
+// Fix Favicon 404
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/stickman_fighter';
@@ -22,7 +30,7 @@ mongoose.connect(MONGODB_URI)
         isDbConnected = true;
     })
     .catch(err => {
-        console.log('MongoDB not found - Running in Memory-Only mode (Multiplayer will still work!)');
+        console.log('MongoDB not found - Running in Memory-Only mode');
         isDbConnected = false;
     });
 
@@ -36,8 +44,11 @@ const roomSchema = new mongoose.Schema({
 
 const Room = mongoose.model('Room', roomSchema);
 
-// Game State Management
-const rooms = {}; // In-memory game state for performance
+// In-memory game state
+const rooms = {}; 
+
+// Constants
+const TICK_RATE = 30; // Server updates 30 times per second
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
@@ -46,35 +57,26 @@ io.on('connection', (socket) => {
     socket.on('createRoom', async () => {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
         
-        // 1. Setup In-Memory State (Always works)
         rooms[roomId] = {
             roomId: roomId,
             players: [socket.id],
             status: 'waiting',
-            scores: { [socket.id]: 0 }
+            gameState: null // Will hold authoritative state
         };
+        
         socket.join(roomId);
         socket.emit('roomCreated', roomId);
-        console.log(`Room ${roomId} created by ${socket.id} (Memory)`);
+        console.log(`Room ${roomId} created by ${socket.id}`);
 
-        // 2. Try MongoDB Persistence (Optional)
         if (isDbConnected) {
             try {
-                const newRoom = new Room({
-                    roomId,
-                    players: [socket.id],
-                    status: 'waiting'
-                });
-                await newRoom.save();
-            } catch (err) {
-                console.error("DB Save Error (Ignored):", err.message);
-            }
+                await new Room({ roomId, players: [socket.id], status: 'waiting' }).save();
+            } catch (e) { console.error("DB Save Error:", e.message); }
         }
     });
 
     // Join Room
     socket.on('joinRoom', async (roomId) => {
-        // 1. Check Memory First
         const room = rooms[roomId];
 
         if (!room) {
@@ -87,61 +89,80 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Update Memory State
         room.players.push(socket.id);
         room.status = 'active';
-        room.scores[socket.id] = 0;
         socket.join(roomId);
 
-        // Update DB if connected
         if (isDbConnected) {
             try {
-                await Room.updateOne({ roomId }, { 
-                    $push: { players: socket.id },
-                    $set: { status: 'active' }
-                });
-            } catch (e) { console.error("DB Update Error (Ignored)"); }
+                await Room.updateOne({ roomId }, { $push: { players: socket.id }, $set: { status: 'active' } });
+            } catch (e) { console.error("DB Update Error:", e.message); }
         }
 
-        // Assign Player Numbers
+        // Assign Roles
         const p1 = room.players[0];
         const p2 = room.players[1];
 
-        io.to(p1).emit('gameStart', { role: 'p1', opponent: p2 });
-        io.to(p2).emit('gameStart', { role: 'p2', opponent: p1 });
+        // Initialize Server-Side Game State for Authority
+        room.gameState = {
+            p1: { x: 200, y: 480, health: 100, state: 'idle', facing: 1 },
+            p2: { x: 800, y: 480, health: 100, state: 'idle', facing: -1 },
+            timer: 60,
+            round: 1,
+            p1Wins: 0,
+            p2Wins: 0
+        };
+
+        io.to(p1).emit('gameStart', { role: 'p1', opponent: p2, initialState: room.gameState });
+        io.to(p2).emit('gameStart', { role: 'p2', opponent: p1, initialState: room.gameState });
         
         console.log(`Player ${socket.id} joined room ${roomId}`);
     });
 
-    // Player Input Relay
+    // Multiplayer: Handle Player Input (Input Relay + Server Validation)
     socket.on('playerInput', (data) => {
-        // Broadcast to the other player in the room
-        socket.to(data.roomId).emit('remoteInput', data.inputState);
+        const { roomId, inputState } = data;
+        const room = rooms[roomId];
+        if (!room || room.status !== 'active') return;
+
+        // Relay input to opponent immediately for responsiveness (Client Prediction)
+        socket.to(roomId).emit('remoteInput', inputState);
+
+        // In a full authoritative server, we would process physics here.
+        // For this hybrid approach to fix latency, we relay inputs but also sync critical state periodically.
     });
 
-    // State Synchronization (Anti-Lag / Anti-Desync)
-    // P1 sends authoritative state to P2 to fix positions
+    // Multiplayer: Sync State (Host Authority or Server Authority)
+    // Here we accept the Host (P1) as the authority for physics to avoid complex server-side physics engine implementation in this snippet.
+    // P1 calculates physics and sends state. Server broadcasts it to P2 to correct desync.
     socket.on('syncState', (data) => {
-        socket.to(data.roomId).emit('syncState', data.state);
+        const { roomId, state } = data;
+        const room = rooms[roomId];
+        if (room) {
+            room.gameState = state; // Update server cache
+            socket.to(roomId).emit('syncState', state); // Broadcast to P2
+        }
     });
 
-    // Game Over / Round End (Simple relay for now, can be authoritative)
+    // Multiplayer: Round End / Game Over
     socket.on('roundResult', (data) => {
-        // data: { roomId, winner: 'p1' | 'p2' }
-        // In a full authoritative server, we would calculate this.
-        // For this hybrid, we trust the clients or P1.
-        io.to(data.roomId).emit('syncRound', data);
+        const { roomId, winner } = data;
+        io.to(roomId).emit('roundResult', { winner });
     });
 
     socket.on('disconnect', async () => {
         console.log('User disconnected:', socket.id);
         // Find room and clean up
-        // This is a simplified cleanup. In production, handle reconnects.
-        const room = await Room.findOne({ players: socket.id });
-        if (room) {
-            io.to(room.roomId).emit('playerDisconnected');
-            await Room.deleteOne({ _id: room._id });
-            delete rooms[room.roomId];
+        for (const roomId in rooms) {
+            const room = rooms[roomId];
+            if (room.players.includes(socket.id)) {
+                io.to(roomId).emit('playerDisconnected');
+                delete rooms[roomId];
+                if (isDbConnected) {
+                    await Room.deleteOne({ roomId });
+                }
+                break;
+            }
         }
     });
 });

@@ -42,6 +42,12 @@ export class Renderer {
         }
     }
 
+    clear() {
+        this.particles = [];
+        this.shakeTimer = 0;
+        this.glitchTimer = 0;
+    }
+
     draw(entities, ghosts, projectiles = [], gameState = 'fighting', countdown = 0) {
         // Clear
         this.ctx.fillStyle = '#000000';

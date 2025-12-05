@@ -142,8 +142,10 @@ export class Entity {
             const hitFromFront = (this.facing === 1 && knockbackX < 0) || (this.facing === -1 && knockbackX > 0);
             if (hitFromFront) {
                 // Block successful
-                amount *= 0.1; // 90% damage reduction
-                this.vx = knockbackX * 0.2; // Reduced knockback
+                // NOTE: Healing is handled in Game.js resolveHit() for perfect block only
+                
+                amount = 0; // Negate damage
+                this.vx = knockbackX * 0.5; // Pushback
                 
                 // Blockstun
                 this.state = 'blockstun';

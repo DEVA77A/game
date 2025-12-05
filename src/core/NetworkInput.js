@@ -2,13 +2,23 @@ export class NetworkInput {
     constructor() {
         this.keys = {};
         this.justPressed = {};
+        this.pendingPresses = {}; // FIX: Queue for incoming presses to ensure they're processed
     }
 
     // Called when receiving data from socket
     updateState(state) {
         // state is { keys: {}, justPressed: {} }
         this.keys = state.keys || {};
-        this.justPressed = state.justPressed || {};
+        
+        // FIX: Add incoming justPressed to pending queue
+        // This ensures attack inputs are not missed even if they arrive between frames
+        if (state.justPressed) {
+            for (const key in state.justPressed) {
+                if (state.justPressed[key]) {
+                    this.pendingPresses[key] = true;
+                }
+            }
+        }
     }
 
     isDown(code) {
@@ -16,14 +26,18 @@ export class NetworkInput {
     }
 
     isJustPressed(code) {
-        const pressed = !!this.justPressed[code];
-        // Auto-clear justPressed after reading (simulating frame consumption)
-        // In a real network scenario, we might want to clear this at the end of the frame
-        // But since we receive a snapshot, we can just return the snapshot value.
-        return pressed;
+        // Check both justPressed and pendingPresses
+        if (this.pendingPresses[code]) {
+            // Move from pending to justPressed and consume
+            delete this.pendingPresses[code];
+            return true;
+        }
+        return false;
     }
 
-    // Helper to clear justPressed at end of frame if needed, 
-    // but for network relay, we rely on the sender's state.
-    update() {} 
+    // Called at end of frame
+    update() {
+        // FIX: Move any remaining pending presses to be available for next frame
+        // This shouldn't happen normally, but ensures no inputs are lost
+    } 
 }

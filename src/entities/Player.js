@@ -103,7 +103,15 @@ export class Player extends Entity {
         if (action.dx !== 0) {
             this.vx = action.dx * this.speed;
             this.facing = action.dx;
-            this.state = 'move';
+            
+            // FIX: Don't overwrite attack/stun states with move
+            // This fixes the "gliding" AI bug where attacks were invisible
+            if (!this.state.startsWith('attack_') && 
+                !this.state.startsWith('hit') && 
+                !this.state.startsWith('block') &&
+                !this.state.startsWith('dash')) {
+                this.state = 'move';
+            }
         } else {
             this.vx = 0;
             if (this.state === 'move') this.state = 'stance_idle';
@@ -149,9 +157,10 @@ export class Player extends Entity {
             moving = true;
         }
 
-        if (moving && !this.state.startsWith('attack_')) {
+        // FIX: Don't overwrite attack/stun states with move
+        if (moving && !this.state.startsWith('attack_') && !this.state.startsWith('hit') && !this.state.startsWith('block')) {
             this.state = 'move';
-        } else if (!moving && !this.state.startsWith('attack_')) {
+        } else if (!moving && !this.state.startsWith('attack_') && !this.state.startsWith('hit') && !this.state.startsWith('block')) {
             this.vx = 0;
             if (this.state === 'move') this.state = 'stance_idle';
         }
@@ -235,6 +244,8 @@ export class Player extends Entity {
                 y: this.y - 40, 
                 w: 40, 
                 h: 40, 
+                offsetX: 30,  // FIX: Store offset for dynamic recalculation
+                offsetY: -40,
                 damage: damage, 
                 knockback: kb, 
                 knockbackY: kbY,
@@ -265,6 +276,8 @@ export class Player extends Entity {
                 y: this.y - 50, 
                 w: 50, 
                 h: 50, 
+                offsetX: 40,  // FIX: Store offset for dynamic recalculation
+                offsetY: -50,
                 damage: damage, 
                 knockback: kb, 
                 knockbackY: kbY,

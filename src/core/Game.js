@@ -18,8 +18,30 @@ export class Game {
         this.socket = null;
         if (typeof io !== 'undefined') {
             try {
-                this.socket = io();
+                // FIX: Robust connection settings for public tunnels
+                this.socket = io({
+                    transports: ['websocket', 'polling'], // Fallback to polling if websocket fails
+                    reconnection: true,
+                    reconnectionAttempts: 10,
+                    timeout: 10000
+                });
                 console.log("Socket.IO connected!");
+                
+                this.socket.on('connect', () => {
+                    const el = document.getElementById('status-text');
+                    if(el) { el.innerText = "ONLINE"; el.style.color = "#00ff00"; }
+                });
+
+                this.socket.on('disconnect', () => {
+                    const el = document.getElementById('status-text');
+                    if(el) { el.innerText = "DISCONNECTED"; el.style.color = "#ff0000"; }
+                });
+
+                this.socket.on('connect_error', (err) => {
+                    console.error("Connection Error:", err);
+                    const el = document.getElementById('status-text');
+                    if(el) { el.innerText = "ERROR"; el.style.color = "#ff0000"; }
+                });
             } catch (e) {
                 console.error("Socket.IO connection failed:", e);
             }
@@ -229,12 +251,41 @@ export class Game {
         this.p2.health = state.p2.health;
         
         // Sync State (Important for animations)
-        // Only override if local state is idle/move to avoid interrupting attacks
-        // Or if the server says we are in a stun state (hitstun, knockdown)
-        if (state.p1.state === 'hitstun' || state.p1.state === 'knockdown' || state.p1.state === 'blockstun') {
+        // FIX: Only override state if it's a "hard" state (stun, knockdown)
+        // OR if the server state is an attack and we are idle (started late)
+        // NEVER override a local attack with an idle state (prevents cancelling animations)
+        
+        const isHardState = (s) => ['hitstun', 'knockdown', 'blockstun', 'dash_clash_stun'].includes(s);
+        const isAttackState = (s) => s.startsWith('attack_');
+
+        // P1 State Sync
+        if (isHardState(state.p1.state)) {
+             this.p1.state = state.p1.state;
+        } else if (isAttackState(state.p1.state)) {
+             // Always accept attacks from server to ensure we see them
+             this.p1.state = state.p1.state;
+             // FIX: Force timer reset to ensure animation plays fully
+             if (this.p1.stateTimer <= 0) this.p1.stateTimer = 0.2;
+        } else if (this.playerRole === 'p2' && isAttackState(this.p1.state)) {
+             // If we are P2, and P1 (remote) is attacking locally but server says idle,
+             // we might want to keep it? No, P1 is remote authority. Trust server for P1.
+             this.p1.state = state.p1.state;
+        } else {
              this.p1.state = state.p1.state;
         }
-        if (state.p2.state === 'hitstun' || state.p2.state === 'knockdown' || state.p2.state === 'blockstun') {
+
+        // P2 State Sync
+        if (isHardState(state.p2.state)) {
+             this.p2.state = state.p2.state;
+        } else if (isAttackState(state.p2.state)) {
+             this.p2.state = state.p2.state;
+             // FIX: Force timer reset to ensure animation plays fully
+             if (this.p2.stateTimer <= 0) this.p2.stateTimer = 0.2;
+        } else if (this.playerRole === 'p2' && isAttackState(this.p2.state)) {
+             // WE ARE P2. We are attacking locally. Server says 'idle' or 'move'.
+             // IGNORE server to prevent animation cancelling (Lag Compensation)
+             // Keep local state.
+        } else {
              this.p2.state = state.p2.state;
         }
 
@@ -284,7 +335,9 @@ export class Game {
                 p1Input = this.input;
                 p2Input = this.remoteInput; 
             } else {
-                p1Input = this.remoteInput; 
+                // FIX: P2 (Client) does not receive P1 inputs, only State.
+                // So we set p1Input to null to prevent local prediction from overwriting server state.
+                p1Input = null; 
                 p2Input = this.input; 
             }
         }
@@ -340,54 +393,68 @@ export class Game {
         
         this.input.update();
         
+        // FIX: Update remote input at end of frame too
+        if (this.gameMode === 'multi') {
+            this.remoteInput.update();
+        }
+        
         // Multiplayer Logic
         if (this.gameMode === 'multi' && this.gameState === 'fighting') {
-            // 1. Send Input (Input Relay)
+            // 1. Send Input (Input Relay) - Only send when there's actual input change
             const relevantKeys = ['KeyA', 'KeyD', 'KeyW', 'KeyS', 'Space', 'ShiftLeft', 'KeyJ', 'KeyK', 'KeyL', 'KeyI'];
-            let hasInput = false;
-            let isHolding = false;
             const justPressedMap = {};
+            let hasChange = false;
             
             relevantKeys.forEach(k => {
                 if (this.input.isJustPressed(k)) {
                     justPressedMap[k] = true;
-                    hasInput = true;
+                    hasChange = true;
                 }
+                // Detect key state changes
                 if (this.input.keys[k] !== this.input.prevKeys[k]) {
-                    hasInput = true;
-                }
-                if (this.input.keys[k]) {
-                    isHolding = true;
+                    hasChange = true;
                 }
             });
 
-            // FIX: Optimize network traffic - Send on change OR throttle hold
-            // Send immediately if input changed (hasInput)
-            // Send every 3 frames if holding keys (isHolding) to prevent packet loss issues
-            // Send heartbeat every 60 frames
-            const frame = Math.floor(this.timer * 60);
+            // FIX: Reduced network traffic - Only send on actual input changes
+            // Attack keys are prioritized
+            const hasAttackInput = justPressedMap['KeyJ'] || justPressedMap['KeyK'] || justPressedMap['KeyL'];
             
-            if (hasInput || (isHolding && frame % 3 === 0) || frame % 60 === 0) {
-                this.socket.emit('playerInput', {
-                    roomId: this.roomId,
-                    inputState: {
-                        keys: this.input.keys,
-                        justPressed: justPressedMap
-                    }
-                });
+            if (hasChange || hasAttackInput) {
+                // FIX: Use regular emit for attack inputs (MUST NOT BE DROPPED)
+                // Use volatile for movement (can be dropped)
+                if (hasAttackInput) {
+                    this.socket.emit('playerInput', {
+                        roomId: this.roomId,
+                        inputState: {
+                            keys: this.input.keys,
+                            justPressed: justPressedMap
+                        }
+                    });
+                } else {
+                    this.socket.volatile.emit('playerInput', {
+                        roomId: this.roomId,
+                        inputState: {
+                            keys: this.input.keys,
+                            justPressed: justPressedMap
+                        }
+                    });
+                }
             }
 
             // 2. Host Authority (P1 Syncs State)
-            // FIX: Increase sync frequency to 15Hz (every 4 frames) for smoother hits
-            // Also trigger immediate sync if damage was dealt (needsSync flag)
+            // FIX: Sync only when there's meaningful state change or every 6 frames (~10Hz)
             if (this.playerRole === 'p1') {
-                if (this.needsSync || frame % 4 === 0) {
-                    this.socket.emit('syncState', {
+                const frame = Math.floor(timestamp / 16.67) % 60; // Frame counter
+                const shouldSync = this.needsSync || frame % 6 === 0;
+                
+                if (shouldSync) {
+                    this.socket.volatile.emit('syncState', {
                         roomId: this.roomId,
                         state: {
-                            p1: { x: this.p1.x, y: this.p1.y, health: this.p1.health, state: this.p1.state, facing: this.p1.facing },
-                            p2: { x: this.p2.x, y: this.p2.y, health: this.p2.health, state: this.p2.state, facing: this.p2.facing },
-                            timer: this.timer
+                            p1: { x: Math.round(this.p1.x), y: Math.round(this.p1.y), health: this.p1.health, state: this.p1.state, facing: this.p1.facing },
+                            p2: { x: Math.round(this.p2.x), y: Math.round(this.p2.y), health: this.p2.health, state: this.p2.state, facing: this.p2.facing },
+                            timer: Math.round(this.timer * 10) / 10
                         }
                     });
                     this.needsSync = false;
@@ -480,9 +547,17 @@ export class Game {
 
         meleeAttackers.forEach(attacker => {
             if (attacker.hitbox && attacker.hitbox.type !== 'special_projectile') {
+                // FIX: Recalculate hitbox position based on attacker's CURRENT position
+                // This fixes the issue where P2's attacks don't hit P1 in multiplayer
+                const hitbox = {
+                    ...attacker.hitbox,
+                    x: attacker.x + (attacker.facing * (attacker.hitbox.offsetX || 30)),
+                    y: attacker.y + (attacker.hitbox.offsetY || -40)
+                };
+                
                 targets.forEach(target => {
                     if (attacker === target) return; 
-                    this.resolveHit(attacker.hitbox, target, attacker.facing);
+                    this.resolveHit(hitbox, target, attacker.facing, attacker);
                 });
             }
         });
@@ -495,7 +570,7 @@ export class Game {
                 const tb = { x: target.x - 15, y: target.y - 60, w: 30, h: 60 };
 
                 if (hb.x < tb.x + tb.w && hb.x + hb.w > tb.x && hb.y < tb.y + tb.h && hb.y + hb.h > tb.y) {
-                    this.resolveHit(hb, target, proj.facing);
+                    this.resolveHit(hb, target, proj.facing, null);
                     proj.active = false; 
                     this.renderer.triggerParticles(proj.x, proj.y, proj.color, 20);
                 }
@@ -576,7 +651,7 @@ export class Game {
         }
     }
 
-    resolveHit(hitbox, target, attackerFacing) {
+    resolveHit(hitbox, target, attackerFacing, attacker = null) {
         const tb = { x: target.x - 15, y: target.y - 60, w: 30, h: 60 };
         
         let hit = false;
@@ -589,6 +664,11 @@ export class Game {
         }
 
         if (hit) {
+            // FIX: Clear hitbox after successful hit to prevent multiple damage
+            if (attacker && attacker.hitbox) {
+                attacker.hitbox = null;
+            }
+            
             // FIX: Trigger immediate sync in multiplayer
             if (this.gameMode === 'multi' && this.playerRole === 'p1') {
                 this.needsSync = true;

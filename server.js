@@ -11,7 +11,12 @@ const io = new Server(server, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
-    }
+    },
+    // FIX: Optimize for low latency
+    pingInterval: 10000,
+    pingTimeout: 5000,
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true
 });
 
 // Serve static files

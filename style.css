@@ -7,6 +7,11 @@
     --font-main: 'Orbitron', sans-serif;
 }
 
+html, body {
+    height: 100%;
+    width: 100%;
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -17,13 +22,17 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
+    height: 100dvh;
+    width: 100vw;
 }
 
 #game-container {
     position: relative;
-    width: 1024px;
-    height: 576px;
+    width: min(1024px, 100vw);
+    max-width: calc(100dvh * 16 / 9);
+    aspect-ratio: 16 / 9;
+    height: auto;
+    max-height: 100dvh;
     box-shadow: 0 0 50px rgba(0, 243, 255, 0.2);
     border: 2px solid #333;
     background: #000;
@@ -34,6 +43,7 @@ canvas {
     display: block;
     width: 100%;
     height: 100%;
+    touch-action: none;
 }
 
 #ui-layer {
@@ -154,11 +164,11 @@ canvas {
 }
 
 #overlay-title {
-    font-size: 80px;
+    font-size: clamp(32px, 8vw, 80px);
     margin: 0;
     color: #fff;
     text-transform: uppercase;
-    letter-spacing: 10px;
+    letter-spacing: clamp(2px, 1vw, 10px);
     text-shadow: 
         2px 2px 0px var(--neon-blue),
         -2px -2px 0px var(--neon-pink);
@@ -168,7 +178,7 @@ canvas {
 }
 
 #overlay-subtitle {
-    font-size: 24px;
+    font-size: clamp(14px, 3vw, 24px);
     margin-top: 30px;
     color: var(--neon-green);
     text-transform: uppercase;
@@ -178,12 +188,14 @@ canvas {
 
 #controls-hint {
     margin-top: 50px;
-    font-size: 16px;
+    font-size: clamp(12px, 2.2vw, 16px);
     color: #888;
     font-family: monospace;
     border: 1px solid #333;
     padding: 20px;
     background: rgba(0,0,0,0.5);
+    max-width: min(90vw, 900px);
+    box-sizing: border-box;
 }
 
 @keyframes pulse {
@@ -284,7 +296,7 @@ canvas {
 }
 
 .game-title {
-    font-size: 60px;
+    font-size: clamp(28px, 6vw, 60px);
     color: #fff;
     text-shadow: 0 0 20px var(--neon-blue), 0 0 40px var(--neon-pink);
     margin-bottom: 50px;
@@ -303,14 +315,14 @@ canvas {
     background: transparent;
     border: 2px solid #fff;
     color: #fff;
-    padding: 15px 40px;
-    font-size: 24px;
+    padding: 14px 28px;
+    font-size: clamp(16px, 3.2vw, 24px);
     font-family: var(--font-main);
     cursor: pointer;
     transition: all 0.2s;
     text-transform: uppercase;
     letter-spacing: 2px;
-    min-width: 300px;
+    min-width: min(300px, 86vw);
 }
 
 .neon-btn:hover {
@@ -335,10 +347,10 @@ canvas {
     border: 2px solid #444;
     color: #fff;
     padding: 15px;
-    font-size: 20px;
+    font-size: clamp(14px, 2.6vw, 20px);
     font-family: var(--font-main);
     text-align: center;
-    width: 200px;
+    width: min(200px, 50vw);
 }
 
 #room-id-input:focus {
@@ -349,7 +361,16 @@ canvas {
 .highlight {
     color: var(--neon-green);
     font-weight: bold;
-    font-size: 32px;
+    font-size: clamp(18px, 5vw, 32px);
+}
+
+@media (max-width: 640px) {
+    .hud-top { padding: 14px; }
+    .bar-label { font-size: 16px; }
+    .health-bar-bg { height: 22px; }
+    .timer-container { font-size: 40px; padding: 8px 14px; }
+    #controls-hint { margin-top: 24px; padding: 14px; }
+    .game-title { margin-bottom: 26px; }
 }
 
 .loader {

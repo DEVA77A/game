@@ -10,7 +10,7 @@ export class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.renderer = new Renderer(this.canvas);
-        this.input = new Input();
+        this.input = new Input(this.canvas);
         this.sound = new SoundManager();
         this.ai = new AdaptiveAI();
         

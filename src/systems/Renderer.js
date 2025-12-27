@@ -2,8 +2,12 @@ export class Renderer {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.width = canvas.width;
-        this.height = canvas.height;
+        this.baseWidth = 1024;
+        this.baseHeight = 576;
+        this.width = this.baseWidth;
+        this.height = this.baseHeight;
+        this.dpr = 1;
+        this.scale = 1;
         
         this.shakeTimer = 0;
         this.shakeIntensity = 0;
@@ -13,10 +17,27 @@ export class Renderer {
     }
 
     resize() {
-        this.canvas.width = this.canvas.parentElement.clientWidth;
-        this.canvas.height = this.canvas.parentElement.clientHeight;
-        this.width = this.canvas.width;
-        this.height = this.canvas.height;
+        const parent = this.canvas.parentElement;
+        if (!parent) return;
+
+        const rect = parent.getBoundingClientRect();
+        const cssWidth = Math.max(1, rect.width);
+        const cssHeight = Math.max(1, rect.height);
+
+        // Device pixel ratio for crisp rendering on high-DPI screens
+        this.dpr = window.devicePixelRatio || 1;
+        this.scale = cssWidth / this.baseWidth;
+
+        // Backing store size in physical pixels
+        this.canvas.width = Math.round(cssWidth * this.dpr);
+        this.canvas.height = Math.round(cssHeight * this.dpr);
+
+        // Logical coordinate system stays fixed
+        this.width = this.baseWidth;
+        this.height = this.baseHeight;
+
+        // Base transform applied each frame before drawing
+        this.ctx.setTransform(this.dpr * this.scale, 0, 0, this.dpr * this.scale, 0, 0);
     }
 
     triggerShake(intensity, duration) {
@@ -49,6 +70,9 @@ export class Renderer {
     }
 
     draw(entities, ghosts, projectiles = [], gameState = 'fighting', countdown = 0) {
+        // Ensure transform is correct even if other code modified it
+        this.ctx.setTransform(this.dpr * this.scale, 0, 0, this.dpr * this.scale, 0, 0);
+
         // Clear
         this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, this.width, this.height);

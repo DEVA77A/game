@@ -1,7 +1,7 @@
 @echo off
-title Memory Map Fighter Server
+title Combat to Death Server
 echo ==========================================
-echo   MEMORY MAP FIGHTER - MULTIPLAYER SERVER
+echo   COMBAT TO DEATH - MULTIPLAYER SERVER
 echo ==========================================
 
 cd /d "%~dp0"

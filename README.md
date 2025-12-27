@@ -1,6 +1,6 @@
-# Memory Map Fighter
+# Combat to Death
 
-**Memory Map Fighter** is a futuristic 1v1 arena fighting game where the arena remembers your actions. Every 10 seconds, a "Ghost Echo" of your previous actions is spawned, creating a chaotic and strategic battlefield where you must fight your opponent while dodging your own past self.
+**Combat to Death** is a futuristic 1v1 arena fighting game where the arena remembers your actions. Every 10 seconds, a "Ghost Echo" of your previous actions is spawned, creating a chaotic and strategic battlefield where you must fight your opponent while dodging your own past self.
 
 ## Features
 - **Time Echo Mechanic**: Actions are recorded and replayed as damaging ghosts.

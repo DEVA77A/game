@@ -14,6 +14,12 @@ export class Renderer {
         this.glitchTimer = 0;
         
         this.particles = [];
+
+        // Impact feedback (purely visual)
+        this.impactFlashTimer = 0;
+        this.impactFlashDuration = 0;
+        this.impactFlashStrength = 0;
+        this.impactFlashColor = 'rgba(255,255,255,0.35)';
     }
 
     resize() {
@@ -49,9 +55,40 @@ export class Renderer {
         this.glitchTimer = duration;
     }
 
+    triggerImpactFlash(color = 'rgba(255,255,255,0.35)', strength = 0.35, duration = 0.06) {
+        this.impactFlashColor = color;
+        this.impactFlashStrength = Math.max(this.impactFlashStrength, strength);
+        this.impactFlashDuration = Math.max(this.impactFlashDuration, duration);
+        this.impactFlashTimer = Math.max(this.impactFlashTimer, duration);
+    }
+
+    triggerHitSparks(x, y, color = '#ffffff', direction = 1, count = 14, strength = 1) {
+        const dir = direction >= 0 ? 1 : -1;
+        const baseAngle = dir === 1 ? 0 : Math.PI;
+        for (let i = 0; i < count; i++) {
+            const spread = (Math.random() - 0.5) * 1.2;
+            const angle = baseAngle + spread;
+            const speed = (10 + Math.random() * 18) * (0.7 + strength * 0.6);
+            this.particles.push({
+                kind: 'spark',
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - (Math.random() * 3),
+                life: 1.0,
+                color,
+                length: (10 + Math.random() * 22) * (0.7 + strength * 0.6),
+                width: 1 + Math.random() * 1.8,
+                rot: angle,
+                rotV: (Math.random() - 0.5) * 0.3
+            });
+        }
+    }
+
     triggerParticles(x, y, color, count = 10) {
         for (let i = 0; i < count; i++) {
             this.particles.push({
+                kind: 'dot',
                 x: x,
                 y: y,
                 vx: (Math.random() - 0.5) * 10,
@@ -67,6 +104,9 @@ export class Renderer {
         this.particles = [];
         this.shakeTimer = 0;
         this.glitchTimer = 0;
+        this.impactFlashTimer = 0;
+        this.impactFlashDuration = 0;
+        this.impactFlashStrength = 0;
     }
 
     draw(entities, ghosts, projectiles = [], gameState = 'fighting', countdown = 0) {
@@ -117,6 +157,24 @@ export class Renderer {
         }
 
         this.ctx.restore();
+
+        // Impact flash (drawn after world, before countdown overlay)
+        if (this.impactFlashTimer > 0) {
+            const t = this.impactFlashDuration > 0 ? (this.impactFlashTimer / this.impactFlashDuration) : 0;
+            const alpha = Math.max(0, Math.min(1, t)) * this.impactFlashStrength;
+            this.ctx.save();
+            this.ctx.globalCompositeOperation = 'screen';
+            this.ctx.globalAlpha = alpha;
+            this.ctx.fillStyle = this.impactFlashColor;
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            this.ctx.restore();
+
+            this.impactFlashTimer -= 0.016;
+            if (this.impactFlashTimer <= 0) {
+                this.impactFlashStrength = 0;
+                this.impactFlashDuration = 0;
+            }
+        }
 
         // Draw Countdown Overlay
         if (gameState === 'pre_fight') {
@@ -470,17 +528,53 @@ export class Renderer {
             p.life -= 0.05;
             p.x += p.vx;
             p.y += p.vy;
+            if (p.kind === 'spark') {
+                p.rot += (p.rotV || 0);
+                // Mild gravity
+                p.vy += 0.4;
+                // Fast drag
+                p.vx *= 0.92;
+                p.vy *= 0.92;
+            }
             
             if (p.life <= 0) {
                 this.particles.splice(i, 1);
                 continue;
             }
             
-            this.ctx.globalAlpha = p.life;
-            this.ctx.fillStyle = p.color;
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            this.ctx.fill();
+            if (p.kind === 'spark') {
+                this.ctx.save();
+                this.ctx.globalAlpha = Math.min(1, p.life * 1.2);
+                this.ctx.translate(p.x, p.y);
+                this.ctx.rotate(p.rot || 0);
+
+                // Bright core
+                this.ctx.strokeStyle = p.color;
+                this.ctx.lineWidth = p.width || 2;
+                this.ctx.shadowColor = p.color;
+                this.ctx.shadowBlur = 14;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo((p.length || 18) * p.life, 0);
+                this.ctx.stroke();
+
+                // White hot tip
+                this.ctx.shadowBlur = 0;
+                this.ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                this.ctx.lineWidth = Math.max(1, (p.width || 2) - 1);
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(Math.max(2, (p.length || 18) * p.life * 0.35), 0);
+                this.ctx.stroke();
+
+                this.ctx.restore();
+            } else {
+                this.ctx.globalAlpha = p.life;
+                this.ctx.fillStyle = p.color;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         }
         this.ctx.globalAlpha = 1.0;
     }

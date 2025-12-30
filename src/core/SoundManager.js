@@ -26,6 +26,19 @@ export class SoundManager {
         this.playTone(100, 'square', 0.1, 0.2);
     }
 
+    playHeavyHit() {
+        // Deeper transient + snap
+        this.playTone(90, 'sawtooth', 0.12, 0.22);
+        this.playTone(55, 'square', 0.08, 0.18);
+        this.playTone(240, 'triangle', 0.04, 0.08);
+    }
+
+    playBlock() {
+        // Higher, shorter "clang" feel
+        this.playTone(380, 'triangle', 0.06, 0.08);
+        this.playTone(520, 'sine', 0.04, 0.05);
+    }
+
     playDash() {
         this.playTone(300, 'sine', 0.2, 0.1);
     }

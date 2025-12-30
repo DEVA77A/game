@@ -72,6 +72,9 @@ export class Game {
         this.roundOverTimer = 0;
         this.lastRoundStats = null;
 
+        // Hit-stop (freeze frames) - purely for feel, no rules changes
+        this.hitStopTimer = 0;
+
         // Ensure DOM is ready before attaching listeners
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => this.setupDashboard());
@@ -362,27 +365,33 @@ export class Game {
         this.countdownTimer = 3.0;
         
         // Reset positions
-        this.p1.x = 200; this.p1.y = 480; this.p1.health = 100; this.p1.isDead = false; this.p1.state = 'idle';
-        this.p2.x = 800; this.p2.y = 480; this.p2.health = 100; this.p2.isDead = false; this.p2.state = 'idle';
+        this.p1.x = 200; this.p1.y = 480; this.p1.health = 100; this.p1.isDead = false; this.p1.state = 'stance_idle';
+        this.p2.x = 800; this.p2.y = 480; this.p2.health = 100; this.p2.isDead = false; this.p2.state = 'stance_idle';
         this.p2.facing = -1;
         this.projectiles = [];
     }
 
     startGame() {
         this.gameState = 'fighting';
-        this.sound.playGlitch();
-        this.renderer.triggerGlitch(1.0);
-        this.renderer.triggerShake(10, 0.5);
+        // NOTE: Do not trigger big glitch/shake on round start.
+        // It reads like blur/lag for some users and can hitch on slower devices.
     }
 
     loop(timestamp) {
         const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1); 
         this.lastTime = timestamp;
 
+        // Apply hit-stop only during fighting (freezes simulation + timer)
+        let simDt = dt;
+        if (this.gameState === 'fighting' && this.hitStopTimer > 0) {
+            this.hitStopTimer -= dt;
+            simDt = 0;
+        }
+
         if (this.gameState === 'pre_fight') {
             this.updatePreFight(dt);
         } else if (this.gameState === 'fighting') {
-            this.update(dt);
+            this.update(simDt);
         } else if (this.gameState === 'round_over') {
             this.updateRoundOver(dt);
         }
@@ -390,14 +399,7 @@ export class Game {
         if (this.gameState !== 'menu' && this.gameState !== 'waiting') {
             this.renderer.draw(this.entities, [], this.projectiles, this.gameState, this.countdownTimer);
         }
-        
-        this.input.update();
-        
-        // FIX: Update remote input at end of frame too
-        if (this.gameMode === 'multi') {
-            this.remoteInput.update();
-        }
-        
+
         // Multiplayer Logic
         if (this.gameMode === 'multi' && this.gameState === 'fighting') {
             // 1. Send Input (Input Relay) - Only send when there's actual input change
@@ -460,6 +462,15 @@ export class Game {
                     this.needsSync = false;
                 }
             }
+        }
+
+        // Input snapshots MUST be updated at end-of-frame.
+        // Otherwise multiplayer networking will never see justPressed / changes.
+        this.input.update();
+
+        // Keep NetworkInput in sync at end of frame too.
+        if (this.gameMode === 'multi') {
+            this.remoteInput.update();
         }
 
         requestAnimationFrame(this.loop.bind(this));
@@ -549,10 +560,19 @@ export class Game {
             if (attacker.hitbox && attacker.hitbox.type !== 'special_projectile') {
                 // FIX: Recalculate hitbox position based on attacker's CURRENT position
                 // This fixes the issue where P2's attacks don't hit P1 in multiplayer
+                // ALSO FIX: Make hitbox placement symmetric for left/right facing.
+                // Offsets are authored as "forward distance" from the attacker.
+                // For left-facing, we need to subtract the hitbox width so the box stays in front.
+                const offsetX = (attacker.hitbox.offsetX ?? 30);
+                const offsetY = (attacker.hitbox.offsetY ?? -40);
+                const hitboxX = attacker.facing === 1
+                    ? attacker.x + offsetX
+                    : attacker.x - offsetX - attacker.hitbox.w;
+
                 const hitbox = {
                     ...attacker.hitbox,
-                    x: attacker.x + (attacker.facing * (attacker.hitbox.offsetX || 30)),
-                    y: attacker.y + (attacker.hitbox.offsetY || -40)
+                    x: hitboxX,
+                    y: attacker.y + offsetY
                 };
                 
                 targets.forEach(target => {
@@ -609,6 +629,9 @@ export class Game {
             
             this.sound.playHit(); 
             this.renderer.triggerShake(10, 0.3);
+            this.renderer.triggerImpactFlash('rgba(255,255,255,0.35)', 0.35, 0.05);
+            this.renderer.triggerHitSparks((attacker.x + target.x)/2, target.y - 40, '#ffffff', attacker.facing, 22, 1.2);
+            this.hitStopTimer = Math.max(this.hitStopTimer, 0.05);
             this.renderer.triggerParticles((attacker.x + target.x)/2, target.y - 40, '#ffffff', 30);
             return;
         }
@@ -645,8 +668,11 @@ export class Game {
         target.takeDamage(actualDamage, attacker.facing * actualKnockback, -200, 'dash_collision');
         
         if (target.state !== 'blocking') {
-             this.sound.playHit();
+               this.sound.playHeavyHit();
              this.renderer.triggerShake(5, 0.2);
+               this.renderer.triggerImpactFlash('rgba(255,255,255,0.3)', 0.3, 0.05);
+               this.renderer.triggerHitSparks((attacker.x + target.x)/2, target.y - 30, '#ffcc00', attacker.facing, 18, 1.0);
+               this.hitStopTimer = Math.max(this.hitStopTimer, 0.045);
              this.renderer.triggerParticles((attacker.x + target.x)/2, target.y - 30, '#ffaa00', 15);
         }
     }
@@ -678,6 +704,11 @@ export class Game {
             let knockbackX = attackerFacing * hitbox.knockback;
             let knockbackY = (hitbox.type === 'special' || hitbox.type === 'special_projectile' || hitbox.type === 'knockdown_hit') ? -400 : -100;
 
+            const isProjectile = hitbox.type === 'special_projectile';
+            const isSpecial = hitbox.type === 'special' || isProjectile;
+            const isKnockdown = hitbox.type === 'knockdown_hit';
+            const isHeavy = hitbox.type === 'heavy' || isKnockdown || isSpecial;
+
             if (target.state === 'blocking') {
                 const hitFromFront = (attackerFacing === 1 && target.facing === -1) || (attackerFacing === -1 && target.facing === 1);
                 if (hitFromFront) {
@@ -686,6 +717,10 @@ export class Game {
                         knockbackX = attackerFacing * 50; 
                         knockbackY = 0;
                         target.health = Math.min(100, target.health + 5); 
+                        this.sound.playBlock();
+                        this.renderer.triggerImpactFlash('rgba(0,243,255,0.25)', 0.25, 0.04);
+                        this.renderer.triggerHitSparks(target.x, target.y - 30, '#ffffff', -attackerFacing, 14, 0.7);
+                        this.hitStopTimer = Math.max(this.hitStopTimer, 0.02);
                         this.renderer.triggerParticles(target.x, target.y - 30, '#00ff00', 20); 
                         this.sound.playGlitch();
                         return; 
@@ -695,6 +730,10 @@ export class Game {
                         knockbackY = 0;
                         target.state = 'blockstun';
                         target.stateTimer = 0.2;
+                        this.sound.playBlock();
+                        this.renderer.triggerImpactFlash('rgba(255,255,255,0.18)', 0.18, 0.04);
+                        this.renderer.triggerHitSparks(target.x, target.y - 30, '#ffffff', -attackerFacing, 10, 0.6);
+                        this.hitStopTimer = Math.max(this.hitStopTimer, 0.02);
                         this.renderer.triggerParticles(target.x, target.y - 30, '#ffffff', 5); 
                     }
                 }
@@ -703,9 +742,21 @@ export class Game {
             target.takeDamage(damage, knockbackX, knockbackY, hitbox.type);
             
             if (target.state !== 'blocking' && target.state !== 'blockstun') {
-                this.sound.playHit();
+                if (isHeavy) this.sound.playHeavyHit();
+                else this.sound.playHit();
+
+                // Tekken-ish impact feel: hit-stop + flash + sparks
+                const hitStop = isSpecial ? 0.075 : (isHeavy ? 0.055 : 0.035);
+                this.hitStopTimer = Math.max(this.hitStopTimer, hitStop);
+
+                const flashStrength = isSpecial ? 0.45 : (isHeavy ? 0.32 : 0.22);
+                this.renderer.triggerImpactFlash('rgba(255,255,255,0.35)', flashStrength, Math.min(0.06, hitStop));
+
+                const sparkColor = isSpecial ? '#ffffff' : (isHeavy ? '#ffcc00' : '#ffffff');
+                this.renderer.triggerHitSparks(target.x, target.y - 30, sparkColor, attackerFacing, isHeavy ? 22 : 14, isHeavy ? 1.2 : 0.85);
+
                 this.renderer.triggerShake(hitbox.damage / 2, 0.2);
-                this.renderer.triggerParticles(target.x, target.y - 30, target.color, 15);
+                this.renderer.triggerParticles(target.x, target.y - 30, target.color, 12);
             }
             
             if (target === this.p2) {
@@ -721,6 +772,12 @@ export class Game {
         document.getElementById('round-display').innerText = `ROUND ${this.round}`;
         document.getElementById('p1-wins').innerText = `WINS: ${this.p1Wins}`;
         document.getElementById('p2-wins').innerText = `WINS: ${this.p2Wins}`;
+
+        // Purely visual: Tekken-style low-health "rage" glow
+        const p1Hud = document.querySelector('.health-container.p1');
+        const p2Hud = document.querySelector('.health-container.p2');
+        if (p1Hud) p1Hud.classList.toggle('is-rage', this.p1.health <= 25);
+        if (p2Hud) p2Hud.classList.toggle('is-rage', this.p2.health <= 25);
 
         const cooldownEl = document.getElementById('special-cooldown');
         if (cooldownEl) {

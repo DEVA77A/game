@@ -66,25 +66,28 @@ export class AdaptiveAI {
     decideMove(ai, player, dt) {
         this.decisionTimer -= dt;
         
-        // AI respect knockdown recovery
-        // If player is down or getting up, back off
-        if (player.state === 'knockdown' || player.state === 'getting_up' || player.invulnerable > 0) {
-            const dx = player.x - ai.x;
-            // Retreat slightly to give space
-            if (Math.abs(dx) < 150) {
-                return { dx: dx > 0 ? -1 : 1, dy: 0, dash: false, punch: false, kick: false, special: false, block: true };
-            } else {
-                // Stand guard
-                return { dx: 0, dy: 0, dash: false, punch: false, kick: false, special: false, block: true };
-            }
-        }
-
-        const dist = Math.sqrt(Math.pow(player.x - ai.x, 2) + Math.pow(player.y - ai.y, 2));
         const dx = player.x - ai.x;
-        const dy = player.y - ai.y;
+        const dist = Math.abs(dx); // Horizontal distance is what matters in this game
 
         // Default output
         let output = { dx: 0, dy: 0, dash: false, punch: false, kick: false, special: false, block: false };
+
+        // Pressure after knockdown instead of backing off.
+        // Keep it fair: approach, guard, and avoid jumping spam.
+        if (player.state === 'knockdown' || player.state === 'getting_up' || player.invulnerable > 0) {
+            const desiredFacing = dx >= 0 ? 1 : -1;
+            // Close distance to a safe pressure range
+            if (dist > 120) {
+                output.dx = desiredFacing;
+                // Dash to re-engage if far and available
+                if (dist > 260 && ai.dashCooldown <= 0 && ai.isOnGround) output.dash = true;
+            } else {
+                output.dx = 0;
+            }
+            // Approach without getting stuck in block; block is handled in normal logic.
+            output.block = false;
+            return output;
+        }
 
         // High level strategy update
         if (this.decisionTimer <= 0) {
@@ -106,7 +109,7 @@ export class AdaptiveAI {
         if (dist > this.targetDistance + 20) {
             // Chase
             output.dx = dx > 0 ? 1 : -1;
-            output.dy = dy > 0 ? 1 : -1; 
+            output.dy = 0;
             
             // Dash to close gap (More likely at higher difficulty)
             // AI uses dash aggressively to pressure the player
@@ -119,14 +122,15 @@ export class AdaptiveAI {
         } else if (dist < this.targetDistance - 20) {
             // Retreat
             output.dx = dx > 0 ? -1 : 1;
-            output.dy = dy > 0 ? -1 : 1;
+            output.dy = 0;
         } else {
             // In range
             output.dx = 0;
             
             // Block Logic (Scaled by difficulty)
             // AI blocks if player is attacking or dashing in close
-            if ((player.state.startsWith('attack_') || player.state === 'dash') && dist < 200) {
+            // Block only when the player is actually threatening and close.
+            if ((player.state.startsWith('attack_') || player.state === 'dash') && dist < 140) {
                 let blockProb = this.blockChance;
                 // Increase block chance for combo finishers or specials
                 if (player.state.endsWith('_3') || player.state.includes('special')) blockProb += 0.3;
@@ -152,6 +156,23 @@ export class AdaptiveAI {
             }
         }
 
+        // If we are close but facing the wrong way, turn first.
+        // This prevents "attacking the air" when the player is behind.
+        const desiredFacing = dx >= 0 ? 1 : -1;
+        const isClose = dist < 160;
+        const isFacingPlayer = ai.facing === desiredFacing;
+        if (isClose && !isFacingPlayer) {
+            // Take a small step to flip facing; don't throw attacks this frame.
+            output.dx = desiredFacing;
+            output.block = false;
+            output.punch = false;
+            output.kick = false;
+            output.special = false;
+            output.dash = false;
+            output.dy = 0;
+            return output;
+        }
+
         // Attack Logic
         if (!output.block) {
             // AI combo decision logic
@@ -162,16 +183,20 @@ export class AdaptiveAI {
                 if (this.profile.aggression > 0.7) continueChance += 0.2;
                 
                 if (Math.random() < continueChance) {
-                    if (ai.state.includes('punch')) output.punch = true;
-                    if (ai.state.includes('kick')) output.kick = true;
+                    // Keep melee grounded to avoid "attacking air" jump spam.
+                    if (ai.isOnGround) {
+                        if (ai.state.includes('punch')) output.punch = true;
+                        if (ai.state.includes('kick')) output.kick = true;
+                    }
                 }
             }
 
             // AI special attack decision
             // Use special when opportunity detected
-            if (ai.specialCooldown <= 0 && dist > 200) {
+              if (ai.specialCooldown <= 0 && dist > 200) {
                  // Check alignment (roughly same height)
-                 if (Math.abs(dy) < 50) {
+                  // (Keep: heights are basically constant in this game)
+                  if (true) {
                      // Check difficulty probability
                      let chance = this.specialChance; // Base chance
                      
@@ -194,12 +219,12 @@ export class AdaptiveAI {
 
             if (dist < 60) {
                 // Close range: Punch
-                if (Math.random() < 0.1 + (this.baseAggression * 0.5)) {
+                if (ai.isOnGround && Math.random() < 0.16 + (this.baseAggression * 0.55)) {
                     output.punch = true;
                 }
             } else if (dist < 100) {
                 // Mid range: Kick
-                if (Math.random() < 0.1 + (this.baseAggression * 0.4)) {
+                if (ai.isOnGround && Math.random() < 0.14 + (this.baseAggression * 0.45)) {
                     output.kick = true;
                 }
             } else if (dist > 200 && ai.specialCooldown <= 0) {

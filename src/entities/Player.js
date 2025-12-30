@@ -132,6 +132,9 @@ export class Player extends Entity {
                 this.vx = 0;
                 this.blockStartTime = Date.now();
             }
+        } else if (this.state === 'blocking') {
+            // AI must actively release block, otherwise it can get stuck and stop making decisions.
+            this.state = 'stance_idle';
         }
         
         // Jump (AI returns dy < 0 for jump)

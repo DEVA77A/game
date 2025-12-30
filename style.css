@@ -62,10 +62,10 @@ canvas {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    padding: 30px;
+    padding: 22px;
     width: 100%;
     box-sizing: border-box;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+    background: linear-gradient(to bottom, rgba(0,0,0,0.92), rgba(0,0,0,0.25) 65%, transparent);
 }
 
 .health-container {
@@ -74,11 +74,11 @@ canvas {
 }
 
 .bar-label {
-    font-size: 24px;
+    font-size: 18px;
     margin-bottom: 10px;
     text-transform: uppercase;
-    letter-spacing: 2px;
-    text-shadow: 0 0 10px currentColor;
+    letter-spacing: 1.5px;
+    text-shadow: 0 0 8px currentColor;
     font-weight: 900;
 }
 
@@ -87,19 +87,44 @@ canvas {
 
 .health-bar-bg {
     width: 100%;
-    height: 30px;
-    background: #111;
-    border: 2px solid #444;
-    transform: skewX(-20deg);
+    height: 28px;
+    background: #0b0b0b;
+    border: 2px solid rgba(255,255,255,0.22);
+    transform: skewX(-12deg);
     overflow: hidden;
     position: relative;
+}
+
+/* Sharp inner frame (Tekken-ish plate feeling) */
+.health-bar-bg::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border: 1px solid rgba(255,255,255,0.12);
+    pointer-events: none;
+}
+
+/* Tekken-style segmented look (purely visual) */
+.health-bar-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.08) 0 2px,
+        rgba(0, 0, 0, 0) 2px 14px
+    );
+    opacity: 0.6;
+    pointer-events: none;
 }
 
 .health-bar-fill {
     height: 100%;
     width: 100%;
     transition: width 0.1s linear;
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .health-bar-fill::after {
@@ -121,6 +146,18 @@ canvas {
     background: linear-gradient(90deg, var(--neon-pink), #ff0055); 
     box-shadow: 0 0 20px var(--neon-pink); 
     transform-origin: right;
+    left: auto;
+    right: 0;
+}
+
+/* Low-health "Rage" styling (class toggled from JS) */
+.health-container.is-rage .health-bar-bg {
+    border-color: #ff3b30;
+}
+
+.health-container.is-rage .health-bar-fill {
+    background: linear-gradient(90deg, #ffcc00, #ff3b30);
+    box-shadow: 0 0 26px rgba(255, 59, 48, 0.7);
 }
 
 #special-cooldown {
@@ -133,14 +170,29 @@ canvas {
 }
 
 .timer-container {
-    font-size: 60px;
+    font-size: 56px;
     font-weight: 900;
     color: #fff;
-    text-shadow: 0 0 20px #fff, 0 0 40px var(--neon-green);
-    background: rgba(0,0,0,0.5);
-    padding: 10px 20px;
-    border: 2px solid #fff;
-    transform: skewX(-10deg);
+    text-shadow: 0 0 18px rgba(255,255,255,0.55), 0 0 28px rgba(0, 255, 65, 0.35);
+    background: rgba(0,0,0,0.65);
+    padding: 8px 18px;
+    border: 2px solid rgba(255,255,255,0.85);
+    transform: none;
+    clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
+}
+
+/* Timer inner line for a stronger "plate" feel */
+.timer-container {
+    position: relative;
+}
+
+.timer-container::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border: 1px solid rgba(255,255,255,0.18);
+    clip-path: inherit;
+    pointer-events: none;
 }
 
 #overlay {
@@ -150,7 +202,8 @@ canvas {
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(5px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -172,7 +225,7 @@ canvas {
     text-shadow: 
         2px 2px 0px var(--neon-blue),
         -2px -2px 0px var(--neon-pink);
-    animation: glitch-text 2s infinite;
+    animation: none;
     text-align: center;
     font-weight: 900;
 }
@@ -183,7 +236,7 @@ canvas {
     color: var(--neon-green);
     text-transform: uppercase;
     letter-spacing: 5px;
-    animation: pulse 1s infinite alternate;
+    animation: none;
 }
 
 #controls-hint {

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Combat to Death - Elemental Fighters</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="1024" height="576"></canvas>
+        
+        <!-- Main Menu (PUBG Style) -->
+        <div id="dashboard">
+            <!-- Top Bar -->
+            <div class="top-bar">
+                <h1 class="game-title-main">COMBAT TO DEATH</h1>
+                <div class="server-status">
+                    <span class="status-dot"></span>
+                    <span id="status-text">CONNECTING...</span>
+                </div>
+            </div>
+            
+            <!-- Center - Selected Character Display -->
+            <div class="character-showcase">
+                <div class="character-model" id="selected-character-display">
+                    <div class="character-glow" id="character-glow"></div>
+                    <div class="character-silhouette" id="character-silhouette"></div>
+                    <div class="character-particles" id="character-particles"></div>
+                </div>
+                <div class="character-info">
+                    <h2 class="character-name" id="selected-char-name">FROST</h2>
+                    <p class="character-element" id="selected-char-element">ICE ELEMENTAL</p>
+                    <p class="character-desc" id="selected-char-desc">Freezes enemies and slows their movements</p>
+                </div>
+            </div>
+            
+            <!-- Bottom Left - Character Selection -->
+            <div class="bottom-left-panel">
+                <h3 class="panel-title">SELECT FIGHTER</h3>
+                <div class="character-grid">
+                    <div class="char-card selected" data-char="ice" id="char-ice">
+                        <div class="char-card-glow ice"></div>
+                        <div class="char-card-icon">❄️</div>
+                        <div class="char-card-name">FROST</div>
+                        <div class="char-card-element">ICE</div>
+                    </div>
+                    <div class="char-card" data-char="fire" id="char-fire">
+                        <div class="char-card-glow fire"></div>
+                        <div class="char-card-icon">🔥</div>
+                        <div class="char-card-name">BLAZE</div>
+                        <div class="char-card-element">FIRE</div>
+                    </div>
+                    <div class="char-card" data-char="lightning" id="char-lightning">
+                        <div class="char-card-glow lightning"></div>
+                        <div class="char-card-icon">⚡</div>
+                        <div class="char-card-name">VOLT</div>
+                        <div class="char-card-element">LIGHTNING</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bottom Right - Play Options -->
+            <div class="bottom-right-panel">
+                <button id="btn-pve" class="play-btn pve">
+                    <span class="btn-icon">🤖</span>
+                    <span class="btn-text">PLAY VS AI</span>
+                    <span class="btn-sub">Single Player</span>
+                </button>
+                <button id="btn-pvp" class="play-btn pvp">
+                    <span class="btn-icon">👥</span>
+                    <span class="btn-text">MULTIPLAYER</span>
+                    <span class="btn-sub">Play with Friends</span>
+                </button>
+                <button id="btn-controls" class="play-btn controls">
+                    <span class="btn-icon">🎮</span>
+                    <span class="btn-text">CONTROLS</span>
+                    <span class="btn-sub">View Key Bindings</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Single Player Menu (Round Selection) -->
+        <div id="singleplayer-menu" class="hidden">
+            <div class="mp-overlay">
+                <div class="mp-panel">
+                    <h2 class="mp-title">SINGLE PLAYER</h2>
+                    <div class="mp-buttons">
+                        <div class="round-selection">
+                            <span class="round-label">ROUNDS TO WIN</span>
+                            <div class="round-options">
+                                <button class="sp-round-btn selected" data-rounds="2">3</button>
+                                <button class="sp-round-btn" data-rounds="3">5</button>
+                                <button class="sp-round-btn" data-rounds="4">7</button>
+                            </div>
+                        </div>
+                        <button id="btn-start-sp" class="mp-btn create">
+                            <span class="mp-btn-icon">⚔️</span>
+                            START BATTLE
+                        </button>
+                        <button id="btn-back-sp" class="mp-btn back">← BACK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Controls Modal -->
+        <div id="controls-modal" class="hidden">
+            <div class="controls-overlay">
+                <div class="controls-panel">
+                    <h2 class="controls-title">⌨️ GAME CONTROLS</h2>
+                    <div class="controls-grid">
+                        <div class="control-item">
+                            <span class="control-key">A</span>
+                            <span class="control-action">Move Left</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">D</span>
+                            <span class="control-action">Move Right</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">SPACE</span>
+                            <span class="control-action">Jump</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">S</span>
+                            <span class="control-action">Block / Perfect Block</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">SHIFT</span>
+                            <span class="control-action">Dash</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">J</span>
+                            <span class="control-action">Punch (Light Attack)</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-key">K</span>
+                            <span class="control-action">Kick (Heavy Attack)</span>
+                        </div>
+                        <div class="control-item special">
+                            <span class="control-key">L</span>
+                            <span class="control-action">Special Skill ⚡</span>
+                        </div>
+                    </div>
+                    <div class="controls-tips">
+                        <h3>💡 TIPS</h3>
+                        <ul>
+                            <li>Perfect Block (S within 200ms of attack) heals you and grants 1s immunity!</li>
+                            <li>Special Skill applies your character's elemental effect</li>
+                            <li>Dash through enemies to dodge attacks</li>
+                        </ul>
+                    </div>
+                    <button id="btn-close-controls" class="mp-btn back">← BACK</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Character Confirm Modal -->
+        <div id="character-confirm-modal" class="hidden">
+            <div class="confirm-overlay">
+                <div class="confirm-panel">
+                    <h2 class="confirm-title">CONFIRM FIGHTER</h2>
+                    <div class="confirm-character">
+                        <div class="confirm-icon" id="confirm-char-icon">❄️</div>
+                        <h3 class="confirm-name" id="confirm-char-name">FROST</h3>
+                        <p class="confirm-element" id="confirm-char-element">ICE ELEMENTAL</p>
+                    </div>
+                    <div class="confirm-traits">
+                        <h4>⚔️ SKILL EFFECT</h4>
+                        <p class="trait-desc" id="confirm-char-trait">Freezes enemies in solid ice for 5 seconds - they cannot move at all!</p>
+                    </div>
+                    <div class="confirm-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">SKILL TYPE</span>
+                            <span class="stat-value" id="confirm-skill-type">FREEZE</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">DURATION</span>
+                            <span class="stat-value" id="confirm-skill-duration">5 SEC</span>
+                        </div>
+                    </div>
+                    <div class="confirm-buttons">
+                        <button id="btn-confirm-char" class="confirm-btn yes">✓ SELECT</button>
+                        <button id="btn-cancel-char" class="confirm-btn no">✗ CANCEL</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Multiplayer Menu -->
+        <div id="multiplayer-menu" class="hidden">
+            <div class="mp-overlay">
+                <div class="mp-panel">
+                    <h2 class="mp-title">MULTIPLAYER LOBBY</h2>
+                    <div class="mp-buttons">
+                        <div class="round-selection">
+                            <span class="round-label">ROUNDS TO WIN</span>
+                            <div class="round-options">
+                                <button class="round-btn selected" data-rounds="2">3</button>
+                                <button class="round-btn" data-rounds="3">5</button>
+                                <button class="round-btn" data-rounds="4">7</button>
+                            </div>
+                        </div>
+                        <button id="btn-create-room" class="mp-btn create">
+                            <span class="mp-btn-icon">🎮</span>
+                            CREATE ROOM
+                        </button>
+                        <div class="join-section">
+                            <input type="text" id="room-id-input" placeholder="ROOM CODE" maxlength="6">
+                            <button id="btn-join-room" class="mp-btn join">JOIN</button>
+                        </div>
+                        <button id="btn-pve-multi" class="mp-btn ai">PLAY VS AI</button>
+                        <button id="btn-back" class="mp-btn back">← BACK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waiting Screen -->
+        <div id="waiting-screen" class="hidden">
+            <div class="waiting-overlay">
+                <div class="waiting-panel">
+                    <h2>WAITING FOR OPPONENT</h2>
+                    <div class="room-code-display">
+                        <span class="code-label">ROOM CODE</span>
+                        <span class="code-value" id="display-room-id">------</span>
+                    </div>
+                    <div class="waiting-spinner"></div>
+                    <p class="waiting-hint">Share this code with your friend</p>
+                    <div class="waiting-actions">
+                        <button id="btn-wait-pve" class="mp-btn ai">PLAY VS AI INSTEAD</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pause Menu -->
+        <div id="pause-menu" class="hidden">
+            <div class="pause-overlay">
+                <div class="pause-panel">
+                    <h2 class="pause-title">⏸️ PAUSED</h2>
+                    <div class="pause-buttons">
+                        <button id="btn-resume" class="pause-btn resume">
+                            <span class="pause-btn-icon">▶️</span>
+                            RESUME GAME
+                        </button>
+                        <button id="btn-quit-game" class="pause-btn quit">
+                            <span class="pause-btn-icon">🚪</span>
+                            QUIT TO MENU
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Round Result Sentence Display -->
+        <div id="round-sentence" class="hidden">
+            <div class="sentence-text" id="sentence-text"></div>
+        </div>
+
+        <!-- In-Game UI -->
+        <div id="ui-layer" class="hidden">
+            <!-- Pause Button -->
+            <button id="btn-pause" class="pause-button">⏸️</button>
+            <div class="hud-top">
+                <div class="health-container p1">
+                    <div class="player-info">
+                        <span class="char-icon" id="p1-char-icon">❄️</span>
+                        <span class="bar-label" id="p1-label">PLAYER 1</span>
+                    </div>
+                    <div class="health-bar-bg"><div id="p1-health" class="health-bar-fill"></div></div>
+                    <div class="status-effects" id="p1-status-effects"></div>
+                    <div class="skill-icons-container">
+                        <div class="skill-icon" id="p1-special-icon" title="Special Attack (L)">
+                            <div class="skill-icon-inner" id="p1-skill-icon">⚡</div>
+                            <svg class="cooldown-ring" viewBox="0 0 36 36">
+                                <circle class="cooldown-bg" cx="18" cy="18" r="16"></circle>
+                                <circle class="cooldown-progress" id="p1-special-progress" cx="18" cy="18" r="16"></circle>
+                            </svg>
+                            <div class="cooldown-text" id="p1-special-text"></div>
+                        </div>
+                        <div class="skill-icon" id="p1-block-icon" title="Perfect Block (S)">
+                            <div class="skill-icon-inner">🛡️</div>
+                            <svg class="cooldown-ring" viewBox="0 0 36 36">
+                                <circle class="cooldown-bg" cx="18" cy="18" r="16"></circle>
+                                <circle class="cooldown-progress" id="p1-block-progress" cx="18" cy="18" r="16"></circle>
+                            </svg>
+                            <div class="cooldown-text" id="p1-block-text"></div>
+                        </div>
+                    </div>
+                    <div id="p1-wins" class="win-counter">WINS: 0</div>
+                </div>
+                <div class="center-hud">
+                    <div class="timer-container">
+                        <div id="timer">60</div>
+                    </div>
+                    <div id="round-display">ROUND 1</div>
+                </div>
+                <div class="health-container p2">
+                    <div class="player-info p2-info">
+                        <span class="bar-label" id="p2-label">OPPONENT</span>
+                        <span class="char-icon" id="p2-char-icon">🔥</span>
+                    </div>
+                    <div class="health-bar-bg"><div id="p2-health" class="health-bar-fill"></div></div>
+                    <div class="status-effects" id="p2-status-effects"></div>
+                    <div class="skill-icons-container">
+                        <div class="skill-icon" id="p2-special-icon">
+                            <div class="skill-icon-inner" id="p2-skill-icon">⚡</div>
+                            <svg class="cooldown-ring" viewBox="0 0 36 36">
+                                <circle class="cooldown-bg" cx="18" cy="18" r="16"></circle>
+                                <circle class="cooldown-progress" id="p2-special-progress" cx="18" cy="18" r="16"></circle>
+                            </svg>
+                            <div class="cooldown-text" id="p2-special-text"></div>
+                        </div>
+                        <div class="skill-icon" id="p2-block-icon">
+                            <div class="skill-icon-inner">🛡️</div>
+                            <svg class="cooldown-ring" viewBox="0 0 36 36">
+                                <circle class="cooldown-bg" cx="18" cy="18" r="16"></circle>
+                                <circle class="cooldown-progress" id="p2-block-progress" cx="18" cy="18" r="16"></circle>
+                            </svg>
+                            <div class="cooldown-text" id="p2-block-text"></div>
+                        </div>
+                    </div>
+                    <div id="p2-wins" class="win-counter">WINS: 0</div>
+                </div>
+            </div>
+            <div id="overlay" class="hidden">
+                <h1 id="overlay-title">GET READY</h1>
+                <p id="overlay-subtitle">Fight!</p>
+                <div id="controls-hint">
+                    A/D: Move | SPACE: Jump | SHIFT: Dash | J: Punch | K: Kick | L: Special
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Post Match Menu -->
+    <div id="post-match-menu" class="hidden">
+        <h2 id="match-result">MATCH OVER</h2>
+        <div class="winner-display" id="winner-display"></div>
+        <div id="rematch-info" class="hidden">
+            <div id="rematch-status">WAITING FOR BOTH PLAYERS...</div>
+            <div>TIME LEFT: <span id="rematch-timer">10</span>S</div>
+        </div>
+        <button id="btn-rematch">REMATCH</button>
+        <button id="btn-menu">MAIN MENU</button>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="src/main.js?v=10"></script>
+</body>
+</html>

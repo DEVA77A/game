@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "append_css",
+			"type": "shell",
+			"command": "echo \"/* Controls Modal */\n#controls-modal {\n    position: absolute;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    background: rgba(0, 0, 0, 0.95);\n    padding: 40px;\n    border: 2px solid var(--neon-pink);\n    box-shadow: 0 0 30px var(--neon-pink);\n    text-align: center;\n    z-index: 100;\n    min-width: 600px;\n}\n\n#controls-modal h2 {\n    color: var(--neon-pink);\n    margin-bottom: 30px;\n    text-shadow: 0 0 10px var(--neon-pink);\n}\n\n.controls-grid {\n    display: flex;\n    justify-content: space-around;\n    margin-bottom: 30px;\n    text-align: left;\n}\n\n.control-col h3 {\n    color: var(--neon-blue);\n    border-bottom: 1px solid var(--neon-blue);\n    padding-bottom: 10px;\n}\n\n.control-col p {\n    margin: 10px 0;\n    font-size: 1.1rem;\n}\n\n#btn-close-controls {\n    border-color: var(--neon-pink);\n    color: var(--neon-pink);\n}\n\n#btn-close-controls:hover {\n    background: var(--neon-pink);\n    color: black;\n    box-shadow: 0 0 15px var(--neon-pink);\n}\" >> style.css",
+			"isBackground": false,
+			"group": "none"
+		}
+	]
+}

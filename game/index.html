@@ -2,12 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a12">
     <title>Combat to Death - Elemental Fighters</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <!-- CrazyGames SDK v3 -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
 </head>
 <body>
     <div id="game-container">
@@ -18,9 +24,14 @@
             <!-- Top Bar -->
             <div class="top-bar">
                 <h1 class="game-title-main">COMBAT TO DEATH</h1>
-                <div class="server-status">
-                    <span class="status-dot"></span>
-                    <span id="status-text">CONNECTING...</span>
+                <div class="top-bar-right">
+                    <button id="btn-music-toggle" class="music-toggle" title="Toggle Music">
+                        <span class="music-icon">🎵</span>
+                    </button>
+                    <div class="server-status">
+                        <span class="status-dot"></span>
+                        <span id="status-text">CONNECTING...</span>
+                    </div>
                 </div>
             </div>
             
@@ -264,6 +275,8 @@
 
         <!-- In-Game UI -->
         <div id="ui-layer" class="hidden">
+            <!-- Fullscreen Button (Mobile) -->
+            <button id="btn-fullscreen" class="fullscreen-button">⛶</button>
             <!-- Pause Button -->
             <button id="btn-pause" class="pause-button">⏸️</button>
             <div class="hud-top">
@@ -333,6 +346,47 @@
                 <p id="overlay-subtitle">Fight!</p>
                 <div id="controls-hint">
                     A/D: Move | SPACE: Jump | SHIFT: Dash | J: Punch | K: Kick | L: Special
+                </div>
+            </div>
+            
+            <!-- Mobile Touch Controls -->
+            <div id="mobile-controls">
+                <!-- Left Side - Joystick + Dash -->
+                <div class="mobile-left">
+                    <!-- Virtual Joystick -->
+                    <div class="joystick-container" id="joystick-container">
+                        <div class="joystick-base">
+                            <div class="joystick-stick" id="joystick-stick"></div>
+                        </div>
+                    </div>
+                    <!-- Dash button only -->
+                    <div class="left-action-buttons">
+                        <button class="left-action-btn dash-btn" data-key="ShiftLeft">
+                            <span>💨</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Right Side - Action buttons (Punch/Kick top, Special/Block bottom) -->
+                <div class="mobile-right">
+                    <div class="action-buttons">
+                        <div class="action-row top-row">
+                            <button class="action-btn punch-btn" data-key="KeyJ">
+                                <span>👊</span>
+                            </button>
+                            <button class="action-btn kick-btn" data-key="KeyK">
+                                <span>🦶</span>
+                            </button>
+                        </div>
+                        <div class="action-row bottom-row">
+                            <button class="action-btn special-btn" data-key="KeyL">
+                                <span>⚡</span>
+                            </button>
+                            <button class="action-btn block-btn" data-key="KeyS">
+                                <span>🛡️</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

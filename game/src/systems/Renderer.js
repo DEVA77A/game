@@ -197,8 +197,8 @@ export class Renderer {
             }
         }
         
-        // Screen shake for skill hit
-        this.triggerShake(15, 0.3);
+        // Screen shake for skill hit (reduced intensity)
+        this.triggerShake(4, 0.15);
     }
 
     drawShieldEffect(entity) {
@@ -2536,8 +2536,8 @@ export class Renderer {
         // Spawn god-tier particles - energy explosion
         this.spawnClashParticles(x, y, color1, color2);
 
-        // Extra screen shake for clash
-        this.triggerShake(25, 0.5);
+        // Extra screen shake for clash (reduced intensity)
+        this.triggerShake(6, 0.2);
 
         // Epic impact flash - white hot center
         this.triggerImpactFlash('rgba(255, 255, 255, 0.8)', 0.7, 0.15);

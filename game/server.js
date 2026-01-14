@@ -287,6 +287,18 @@ io.on('connection', (socket) => {
         // In a full authoritative server, we would process physics here.
         // For this hybrid approach to fix latency, we relay inputs but also sync critical state periodically.
     });
+    
+    // Multiplayer: Pause synchronization
+    // Either player can pause/resume and it syncs to the other
+    socket.on('pause', (data) => {
+        const { roomId, paused } = data || {};
+        const room = rooms[roomId];
+        if (!room || room.status !== 'active') return;
+        if (!room.players.includes(socket.id)) return;
+        
+        // Relay pause state to the other player
+        socket.to(roomId).emit('pause', { paused });
+    });
 
     // Multiplayer: Sync State (Host Authority or Server Authority)
     // Here we accept the Host (P1) as the authority for physics to avoid complex server-side physics engine implementation in this snippet.

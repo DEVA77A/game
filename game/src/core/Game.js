@@ -545,6 +545,9 @@ export class Game {
     }
 
     setupDashboard() {
+        // Start lobby music when dashboard loads
+        this.sound.playLobbyMusic();
+        
         // Character Selection
         this.setupCharacterSelection();
 
@@ -553,6 +556,12 @@ export class Game {
 
         // Pause Menu Setup
         this.setupPauseMenu();
+
+        // Music Toggle Setup
+        this.setupMusicToggle();
+        
+        // Fullscreen Setup (Mobile)
+        this.setupFullscreen();
 
         // Dashboard Buttons
         const btnPve = document.getElementById('btn-pve');
@@ -700,7 +709,16 @@ export class Game {
 
         const btnMenu = document.getElementById('btn-menu');
         if (btnMenu) {
-            btnMenu.onclick = () => this.backToDashboard();
+            btnMenu.onclick = () => {
+                // CrazyGames: Show interstitial ad when going to Main Menu after match
+                if (window.CrazyAds && !window.CrazyAds.adInProgress) {
+                    window.CrazyAds.showInterstitial(() => {
+                        this.backToDashboard();
+                    });
+                } else {
+                    this.backToDashboard();
+                }
+            };
         }
     }
 
@@ -831,6 +849,164 @@ export class Game {
         }
     }
 
+    setupMusicToggle() {
+        const btnMusic = document.getElementById('btn-music-toggle');
+        this.isMusicEnabled = true;
+        
+        if (btnMusic) {
+            btnMusic.onclick = () => {
+                this.isMusicEnabled = !this.isMusicEnabled;
+                
+                if (this.isMusicEnabled) {
+                    btnMusic.classList.remove('muted');
+                    // Resume the appropriate music
+                    if (this.gameState === 'menu') {
+                        this.sound.playLobbyMusic();
+                    } else if (this.gameState === 'fighting' || this.gameState === 'pre_fight') {
+                        this.sound.playBattleMusic();
+                    }
+                } else {
+                    btnMusic.classList.add('muted');
+                    this.sound.stopMusic();
+                }
+            };
+        }
+    }
+    
+    setupFullscreen() {
+        const btnFullscreen = document.getElementById('btn-fullscreen');
+        
+        if (btnFullscreen) {
+            btnFullscreen.onclick = () => {
+                this.toggleFullscreen();
+            };
+        }
+        
+        // Update button icon based on fullscreen state
+        document.addEventListener('fullscreenchange', () => this.updateFullscreenButton());
+        document.addEventListener('webkitfullscreenchange', () => this.updateFullscreenButton());
+        
+        // Auto-request fullscreen on game start for mobile
+        this.autoRequestFullscreen();
+    }
+    
+    toggleFullscreen() {
+        const elem = document.documentElement;
+        
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+            // Enter fullscreen
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen({ navigationUI: 'hide' }).catch(err => {
+                    console.log('Fullscreen request failed:', err);
+                });
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            }
+            
+            // Lock to landscape on mobile if supported
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
+        } else {
+            // Exit fullscreen
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
+        }
+    }
+    
+    updateFullscreenButton() {
+        const btnFullscreen = document.getElementById('btn-fullscreen');
+        if (btnFullscreen) {
+            const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+            btnFullscreen.textContent = isFullscreen ? '⛶' : '⛶';
+            btnFullscreen.style.display = isFullscreen ? 'none' : 'flex';
+        }
+    }
+    
+    autoRequestFullscreen() {
+        // Check if mobile/touch device
+        const isTouchDevice = ('ontouchstart' in window) || 
+                              (navigator.maxTouchPoints > 0) || 
+                              window.matchMedia('(pointer: coarse)').matches;
+        
+        if (isTouchDevice) {
+            // Create fullscreen prompt overlay
+            this.createFullscreenPrompt();
+        }
+    }
+    
+    createFullscreenPrompt() {
+        // Check if already in fullscreen
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'fullscreen-prompt';
+        overlay.innerHTML = `
+            <div class="fullscreen-prompt-content">
+                <div class="fullscreen-icon">⛶</div>
+                <div class="fullscreen-text">TAP TO ENTER FULLSCREEN</div>
+                <div class="fullscreen-subtext">For the best experience</div>
+            </div>
+        `;
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            cursor: pointer;
+            touch-action: manipulation;
+        `;
+        
+        const content = overlay.querySelector('.fullscreen-prompt-content');
+        content.style.cssText = `
+            text-align: center;
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+        `;
+        
+        const icon = overlay.querySelector('.fullscreen-icon');
+        icon.style.cssText = `
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: pulse 1.5s infinite;
+        `;
+        
+        const text = overlay.querySelector('.fullscreen-text');
+        text.style.cssText = `
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #00d4ff;
+        `;
+        
+        const subtext = overlay.querySelector('.fullscreen-subtext');
+        subtext.style.cssText = `
+            font-size: 14px;
+            color: #888;
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Handle tap to enter fullscreen
+        const enterFullscreen = () => {
+            overlay.remove();
+            this.toggleFullscreen();
+        };
+        
+        overlay.addEventListener('click', enterFullscreen);
+        overlay.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            enterFullscreen();
+        }, { passive: false });
+    }
+
     setupControlsModal() {
         const btnControls = document.getElementById('btn-controls');
         const modal = document.getElementById('controls-modal');
@@ -892,26 +1068,59 @@ export class Game {
         }
     }
 
-    pauseGame() {
-        // Don't pause in multiplayer (would desync), or if already paused
-        if (this.gameMode === 'multi' || this.isPaused) return;
-        if (this.gameState === 'menu' || this.gameState === 'match_over') return;
+    pauseGame(fromSocket = false) {
+        // Don't pause if already paused or in menu states
+        if (this.isPaused) return;
+        if (this.gameState === 'menu' || this.gameState === 'match_over' || this.gameState === 'waiting') return;
         
         this.isPaused = true;
-        document.getElementById('pause-menu').classList.remove('hidden');
+        const pauseMenu = document.getElementById('pause-menu');
+        if (pauseMenu) pauseMenu.classList.remove('hidden');
+        
+        // Pause music
+        if (this.sound && this.sound.stopMusic) {
+            this._wasMusicPlaying = this.sound.isMusicPlaying;
+            this.sound.stopMusic();
+        }
+        
+        // Sync pause to remote player in multiplayer (only if this isn't from socket)
+        if (!fromSocket && this.gameMode === 'multi' && this.socket && this.roomId) {
+            this.socket.emit('pause', { roomId: this.roomId, paused: true });
+        }
     }
 
-    resumeGame() {
+    resumeGame(fromSocket = false) {
         if (!this.isPaused) return;
         
         this.isPaused = false;
-        document.getElementById('pause-menu').classList.add('hidden');
+        const pauseMenu = document.getElementById('pause-menu');
+        if (pauseMenu) pauseMenu.classList.add('hidden');
+        
+        // Resume music if it was playing
+        if (this._wasMusicPlaying && this.sound) {
+            if (this.gameState === 'fighting' || this.gameState === 'pre_fight' || this.gameState === 'round_over') {
+                this.sound.playBattleMusic();
+            }
+        }
+        
+        // Sync resume to remote player in multiplayer (only if this isn't from socket)
+        if (!fromSocket && this.gameMode === 'multi' && this.socket && this.roomId) {
+            this.socket.emit('pause', { roomId: this.roomId, paused: false });
+        }
     }
 
     quitToMenu() {
         this.isPaused = false;
         document.getElementById('pause-menu').classList.add('hidden');
-        this.backToDashboard();
+        
+        // CrazyGames: Show interstitial ad when quitting mid-game
+        if (window.CrazyAds && !window.CrazyAds.adInProgress) {
+            window.CrazyAds.showInterstitial(() => {
+                this.backToDashboard();
+            });
+        } else {
+            this.backToDashboard();
+        }
     }
 
     setupSocketEvents() {
@@ -923,6 +1132,7 @@ export class Game {
         this.socket.off('clientState');
         this.socket.off('spawnProjectile');
         this.socket.off('projectileClash');
+        this.socket.off('pause');
         this.socket.off('roundResult');
         this.socket.off('rematchStatus');
         this.socket.off('rematchStart');
@@ -975,6 +1185,9 @@ export class Game {
             document.getElementById('waiting-screen').classList.add('hidden');
             document.getElementById('post-match-menu').classList.add('hidden');
             document.getElementById('ui-layer').classList.remove('hidden');
+
+            // Switch to battle music for multiplayer
+            this.sound.playBattleMusic();
 
             // Update UI labels
             const p1LabelEl = document.querySelector('.health-container.p1 .bar-label');
@@ -1152,10 +1365,6 @@ export class Game {
             // Trigger the epic visual effect
             this.renderer.triggerProjectileClash(data.x, data.y, data.color1, data.color2);
             
-            // Play sounds
-            this.sound.playHeavyHit();
-            setTimeout(() => this.sound.playBlock(), 50);
-            
             // Apply knockdown to both players (P2 client side)
             this.applyClashKnockdown(this.p1, data.x);
             this.applyClashKnockdown(this.p2, data.x);
@@ -1204,6 +1413,15 @@ export class Game {
         this.socket.on('error', (msg) => {
             console.log('[SOCKET ERROR]', msg);
             alert(msg);
+        });
+        
+        // Pause sync for multiplayer - when either player pauses/resumes
+        this.socket.on('pause', (data) => {
+            if (data.paused) {
+                this.pauseGame(true); // fromSocket = true to prevent echo
+            } else {
+                this.resumeGame(true); // fromSocket = true to prevent echo
+            }
         });
     }
 
@@ -1323,6 +1541,9 @@ export class Game {
         document.getElementById('post-match-menu').classList.add('hidden');
         document.getElementById('ui-layer').classList.remove('hidden');
         
+        // Switch to battle music
+        this.sound.playBattleMusic();
+        
         this.initMatch();
         this.startPreFight();
     }
@@ -1390,7 +1611,6 @@ export class Game {
             }
 
             this.projectiles.push(new Projectile(x, y, facing, owner));
-            this.sound.playGlitch();
 
             if (this.gameMode === 'multi' && this.playerRole === 'p1' && this.socket && this.roomId) {
                 const ownerRole = owner === this.p2 ? 'p2' : 'p1';
@@ -1423,9 +1643,9 @@ export class Game {
             }
         }
 
-        this.p1 = new Player(200, 480, '#00f3ff', false, p1Input, null, spawnProjectile);
+        this.p1 = new Player(200, 480, '#00f3ff', false, p1Input, null, spawnProjectile, 'ice', this.sound);
         const isP2AI = this.gameMode === 'single';
-        this.p2 = new Player(800, 480, '#ff00ff', isP2AI, p2Input, p2AI, spawnProjectile);
+        this.p2 = new Player(800, 480, '#ff00ff', isP2AI, p2Input, p2AI, spawnProjectile, 'ice', this.sound);
         this.p2.facing = -1;
 
         // Assign characters
@@ -1542,6 +1762,9 @@ export class Game {
         this.gameState = 'fighting';
         // NOTE: Do not trigger big glitch/shake on round start.
         // It reads like blur/lag for some users and can hitch on slower devices.
+        
+        // Play fight start sound
+        this.sound.playRoundStart();
     }
 
     loop(timestamp) {
@@ -1739,7 +1962,17 @@ export class Game {
     }
 
     updatePreFight(dt) {
+        // Track previous countdown second for sound
+        const prevSecond = Math.ceil(this.countdownTimer);
+        
         this.countdownTimer -= dt;
+        
+        // Play countdown tick when second changes
+        const currentSecond = Math.ceil(this.countdownTimer);
+        if (currentSecond !== prevSecond && currentSecond > 0 && currentSecond <= 3) {
+            this.sound.playCountdown();
+        }
+        
         if (this.countdownTimer <= 0) {
             this.startGame();
         }
@@ -1974,11 +2207,6 @@ export class Game {
         // Trigger the god-tier visual effect
         this.renderer.triggerProjectileClash(clashX, clashY, color1, color2);
 
-        // Play epic sound effect
-        this.sound.playHeavyHit();
-        // Extra sound for epic feel
-        setTimeout(() => this.sound.playBlock(), 50);
-
         // Apply knockdown to BOTH players (no HP loss)
         this.applyClashKnockdown(this.p1, clashX);
         this.applyClashKnockdown(this.p2, clashX);
@@ -2063,19 +2291,17 @@ export class Game {
             const attackerFacing = (victimRole === 'p2') ? (state.p1.facing ?? attacker.facing) : (state.p2.facing ?? attacker.facing);
 
             const isHeavy = damageAmount >= 15;
-            if (isHeavy) this.sound.playHeavyHit();
-            else this.sound.playHit();
 
             const flashStrength = isHeavy ? 0.32 : 0.22;
             this.renderer.triggerImpactFlash('rgba(255,255,255,0.35)', flashStrength, 0.05);
             this.renderer.triggerHitSparks(victim.x, victim.y - 30, isHeavy ? '#ffcc00' : '#ffffff', attackerFacing, isHeavy ? 22 : 14, isHeavy ? 1.2 : 0.85);
             this.renderer.triggerParticles(victim.x, victim.y - 30, victim.color, 10);
 
-            // Screen shake ONLY for the locally-hit player
+            // Screen shake ONLY for the locally-hit player (reduced intensity)
             const localVictim = (victimRole === 'p2');
             if (localVictim) {
-                const intensity = Math.min(12, 3 + (damageAmount * 0.35));
-                this.renderer.triggerShake(intensity, 0.18);
+                const intensity = Math.min(4, 1 + (damageAmount * 0.1));
+                this.renderer.triggerShake(intensity, 0.1);
             }
         };
 
@@ -2106,8 +2332,7 @@ export class Game {
             target.stateTimer = 0.5; 
             target.dashCooldown = 1.0;
             
-            this.sound.playHit(); 
-            if (this.gameMode === 'single') this.renderer.triggerShake(10, 0.3);
+            if (this.gameMode === 'single') this.renderer.triggerShake(3, 0.12);
             this.renderer.triggerImpactFlash('rgba(255,255,255,0.35)', 0.35, 0.05);
             this.renderer.triggerHitSparks((attacker.x + target.x)/2, target.y - 40, '#ffffff', attacker.facing, 22, 1.2);
             this.hitStopTimer = Math.max(this.hitStopTimer, 0.05);
@@ -2156,12 +2381,11 @@ export class Game {
         target.takeDamage(actualDamage, attacker.facing * actualKnockback, -200, 'dash_collision');
         
         if (target.state !== 'blocking') {
-               this.sound.playHeavyHit();
-               // Screen shake should only hit the locally-hit player in multiplayer.
-               if (this.gameMode === 'single') this.renderer.triggerShake(5, 0.2);
+               // Screen shake should only hit the locally-hit player in multiplayer (reduced).
+               if (this.gameMode === 'single') this.renderer.triggerShake(2, 0.1);
                if (this.gameMode === 'multi') {
                    const localPlayer = this.playerRole === 'p1' ? this.p1 : this.p2;
-                   if (target === localPlayer) this.renderer.triggerShake(5, 0.2);
+                   if (target === localPlayer) this.renderer.triggerShake(2, 0.1);
                }
                this.renderer.triggerImpactFlash('rgba(255,255,255,0.3)', 0.3, 0.05);
                this.renderer.triggerHitSparks((attacker.x + target.x)/2, target.y - 30, '#ffcc00', attacker.facing, 18, 1.0);
@@ -2230,12 +2454,11 @@ export class Game {
                         target.state = 'perfect_block_shield'; // New state for visual
                         target.stateTimer = target.perfectBlockShieldDuration;
                         
-                        this.sound.playBlock();
+                        this.sound.playPerfectBlock();
                         this.renderer.triggerImpactFlash('rgba(0,243,255,0.25)', 0.25, 0.04);
                         this.renderer.triggerHitSparks(target.x, target.y - 30, '#ffffff', -attackerFacing, 14, 0.7);
                         this.hitStopTimer = Math.max(this.hitStopTimer, 0.02);
                         this.renderer.triggerParticles(target.x, target.y - 30, '#00ff00', 20); 
-                        this.sound.playGlitch();
                         return; 
                     } else {
                         damage = Math.ceil(damage * 0.1); 
@@ -2276,9 +2499,6 @@ export class Game {
             }
             
             if (target.state !== 'blocking' && target.state !== 'blockstun') {
-                if (isHeavy) this.sound.playHeavyHit();
-                else this.sound.playHit();
-
                 // Tekken-ish impact feel: hit-stop + flash + sparks
                 const hitStop = isSpecial ? 0.075 : (isHeavy ? 0.055 : 0.035);
                 this.hitStopTimer = Math.max(this.hitStopTimer, hitStop);
@@ -2289,14 +2509,14 @@ export class Game {
                 const sparkColor = isSpecial ? '#ffffff' : (isHeavy ? '#ffcc00' : '#ffffff');
                 this.renderer.triggerHitSparks(target.x, target.y - 30, sparkColor, attackerFacing, isHeavy ? 22 : 14, isHeavy ? 1.2 : 0.85);
 
-                // Screen shake:
+                // Screen shake (reduced intensity):
                 // - Singleplayer: always (arcade feel)
                 // - Multiplayer: ONLY if the local player is the one being hit
                 if (this.gameMode === 'single') {
-                    this.renderer.triggerShake(hitbox.damage / 2, 0.2);
+                    this.renderer.triggerShake(hitbox.damage / 5, 0.1);
                 } else if (this.gameMode === 'multi') {
                     const localPlayer = this.playerRole === 'p1' ? this.p1 : this.p2;
-                    if (target === localPlayer) this.renderer.triggerShake(hitbox.damage / 2, 0.2);
+                    if (target === localPlayer) this.renderer.triggerShake(hitbox.damage / 5, 0.1);
                 }
                 this.renderer.triggerParticles(target.x, target.y - 30, target.color, 12);
             }
@@ -2524,9 +2744,9 @@ export class Game {
         flash.className = 'impact-flash';
         overlay.appendChild(flash);
 
-        // Camera shake
+        // Camera shake (reduced intensity)
         if (this.renderer) {
-            this.renderer.triggerShake(25, 0.5);
+            this.renderer.triggerShake(6, 0.2);
         }
 
         // === PHASE 2: SLOW MOTION REPLAY (after 300ms) ===
@@ -2545,9 +2765,9 @@ export class Game {
             canvas.classList.remove('final-shot-zoom');
             canvas.classList.add('final-shot-impact');
             
-            // Big impact shake
+            // Big impact shake (reduced intensity)
             if (this.renderer) {
-                this.renderer.triggerShake(30, 0.8);
+                this.renderer.triggerShake(8, 0.3);
             }
 
             // Add K.O. text
@@ -2618,6 +2838,22 @@ export class Game {
             }
         }
 
+        // Play KO sound for the loser
+        this.sound.playKO();
+
+        // Play victory/defeat sound based on player perspective
+        const playerWonRound = (this.gameMode === 'single' && winner.includes('P1')) ||
+            (this.gameMode === 'multi' && this.playerRole === 'p1' && winner.includes('P1')) ||
+            (this.gameMode === 'multi' && this.playerRole === 'p2' && winner.includes('P2'));
+        
+        setTimeout(() => {
+            if (playerWonRound) {
+                this.sound.playVictory();
+            } else if (winner !== 'DRAW') {
+                this.sound.playDefeat();
+            }
+        }, 300);
+
         // Notify server if Host
         if (this.gameMode === 'multi' && this.playerRole === 'p1') {
             this.socket.emit('roundResult', {
@@ -2674,11 +2910,31 @@ export class Game {
         document.getElementById('overlay-subtitle').innerText = '';
         document.getElementById('overlay').classList.remove('hidden');
 
+        // Play match victory/defeat sound based on player perspective
+        const playerWonMatch = (this.gameMode === 'single' && winner.includes('P1')) ||
+            (this.gameMode === 'multi' && this.playerRole === 'p1' && winner.includes('P1')) ||
+            (this.gameMode === 'multi' && this.playerRole === 'p2' && winner.includes('P2'));
+        
+        setTimeout(() => {
+            if (playerWonMatch) {
+                this.sound.playMatchVictory();
+            } else {
+                this.sound.playMatchDefeat();
+            }
+        }, 200);
+
         // Show post-match menu for both singleplayer and multiplayer
         document.getElementById('post-match-menu').classList.remove('hidden');
 
         // Reset rematch UI state
         this.updateRematchUI(false, 0, false, false);
+        
+        // CrazyGames: Show interstitial ad when match ends
+        if (window.CrazyAds && !window.CrazyAds.adInProgress) {
+            setTimeout(() => {
+                window.CrazyAds.showInterstitial();
+            }, 1500);
+        }
     }
 
     rematch(fromServer = false, nextMatchId = null) {
@@ -2738,6 +2994,9 @@ export class Game {
         this.gameState = 'menu';
         this.gameMode = 'single';
         this.roomId = null;
+        
+        // Switch back to lobby music
+        this.sound.playLobbyMusic();
         
         // Reset UI
         document.getElementById('ui-layer').classList.add('hidden');

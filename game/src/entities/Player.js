@@ -3,12 +3,13 @@ import { CHARACTERS, getCharacterById } from '../core/Characters.js';
 import { StatusEffectManager } from '../core/StatusEffects.js';
 
 export class Player extends Entity {
-    constructor(x, y, color, isAI, input, aiController, spawnProjectile, characterId = 'ice') {
+    constructor(x, y, color, isAI, input, aiController, spawnProjectile, characterId = 'ice', soundManager = null) {
         super(x, y, color);
         this.isAI = isAI;
         this.input = input;
         this.aiController = aiController;
         this.spawnProjectile = spawnProjectile;
+        this.soundManager = soundManager; // For playing sounds
         
         // Character System
         this.characterId = characterId;
@@ -230,6 +231,7 @@ export class Player extends Entity {
             this.vy = this.jumpForce;
             this.isOnGround = false;
             this.state = 'jump';
+            if (this.soundManager) this.soundManager.playJump();
         }
     }
 
@@ -261,6 +263,7 @@ export class Player extends Entity {
             this.vy = this.jumpForce;
             this.isOnGround = false;
             this.state = 'jump';
+            if (this.soundManager) this.soundManager.playJump();
         }
 
         if (this.input.isJustPressed('ShiftLeft') && this.dashCooldown <= 0 && this.isOnGround) {
@@ -295,6 +298,7 @@ export class Player extends Entity {
         this.vx = this.facing * 800;
         this.vy = 0;
         this.dashCooldown = 1.0;
+        if (this.soundManager) this.soundManager.playDash();
     }
 
     performAttack(type) {
